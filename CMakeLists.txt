@@ -37,6 +37,7 @@ find_package(OpenCV 3.0 REQUIRED)
 MESSAGE(STATUS "OpenCV include: " ${OpenCV_INCLUDE_DIRS})
 MESSAGE(STATUS "OpenCV libray: " ${OpenCV_LIBRARIES})
 find_package(Eigen3 3.1.0 REQUIRED)
+MESSAGE(STATUS "Eigen include: " ${EIGEN3_INCLUDE_DIR})
 find_package(Pangolin REQUIRED)
 find_package(Boost  1.54.0  	     # Minimum or EXACT version e.g. 1.36.0
   REQUIRED             					# Fail with error if Boost is not found
@@ -77,6 +78,7 @@ add_library(${PROJECT_NAME} SHARED
     src/Converter.cc
     src/MedianFilter.cc
 )
+
 target_link_libraries(${PROJECT_NAME}
     ${OpenCV_LIBRARIES}
     ${EIGEN3_LIBS} 
@@ -108,3 +110,12 @@ target_link_libraries(testConverter ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
 add_executable(testAutoInit
 test/autoinit.cc)
 target_link_libraries(testAutoInit ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+add_executable(testDirect
+test/direct.cc)
+target_link_libraries(testDirect ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+add_executable(test2D2DG2O
+test/test2D2DG2O.cc)
+target_link_libraries(test2D2DG2O ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+add_executable(testPatch
+test/patch.cc)
+target_link_libraries(testPatch ${OpenCV_LIBRARIES} ${PROJECT_NAME} )

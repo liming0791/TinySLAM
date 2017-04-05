@@ -1,2 +1,6 @@
 *.o
 build
+cmake-build*
+.idea
+bin/*
+*.so

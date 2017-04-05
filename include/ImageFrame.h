@@ -38,6 +38,8 @@ class ImageFrame
         vector< cv::Point2f > trackedPoints;
         vector< cv::Point2f > undisTrackedPoints;
 
+        cv::Mat descriptors;
+
         Map_2d_3d map_2d_3d;
 
         TooN::SE3<> mTcw;                      // Transformation from w to camera
@@ -50,6 +52,12 @@ class ImageFrame
         explicit ImageFrame(const ImageFrame& imgFrame);
 
         void extractFAST();
+        void extractPatch();
+        void computePatchDescriptorAtPoint(
+                const cv::Point2f &pt, 
+                const cv::Mat &im,
+                float* desc);
+        void trackPatchFAST(ImageFrame& refFrame);
         void opticalFlowFAST(ImageFrame& refFrame);
         void opticalFlowTrackedFAST(ImageFrame& lastFrame);
         void SBITrackFAST(ImageFrame& refFrame);

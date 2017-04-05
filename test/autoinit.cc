@@ -24,7 +24,7 @@ int main(int argc, char** argv)
             camera1.K.k1 , camera1.K.k2, camera1.K.width ,camera1.K.height ) ;   
 
     cv::Mat Frame;
-    if (!camera1.openCamera(1)) {
+    if (!camera1.openCamera(atoi(argv[2]))) {
         printf("Open camera failed!\n");
         exit(0);
     }
@@ -39,7 +39,6 @@ int main(int argc, char** argv)
     char cmd = ' ';
     while (true) {
 
-        TIME_BEGIN()
 
         if ( !camera1.getFrame(Frame, camera1.BGR) ) {
             printf("Get Frame failed!\n");
@@ -52,8 +51,12 @@ int main(int argc, char** argv)
         }
 
         if (started) {
+
             ImageFrame newImgFrame(Frame, &K1);
+
+            TIME_BEGIN()
             tracker.TrackMonocular(newImgFrame);
+            TIME_END("One Frame")
 
             for (int i = 0, _end = (int)tracker.refFrame.points.size(); i < _end; i++) { // draw result
                 if (newImgFrame.trackedPoints[i].x > 0) {
@@ -70,7 +73,6 @@ int main(int argc, char** argv)
             }
         }
 
-        TIME_END("One Frame")
 
         cv::imshow("result",Frame);
         cmd = cv::waitKey(33);

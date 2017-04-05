@@ -82,3 +82,17 @@ cv::Point2f CameraIntrinsic::device2pixel(float u, float v)
 {
    return cv::Point2f( u*fx + cx, v*fy + cy ); 
 }
+
+cv::Point3f CameraIntrinsic::Proj2Dto3D(float x, float y, float d)
+{
+    float xx = d * (x - cx) / fx;
+    float yy = d * (y - cy) / fy;
+    return cv::Point3f(xx, yy, d);
+}
+
+cv::Point2f CameraIntrinsic::Proj3Dto2D(float x, float y, float z)
+{
+    float u = fx*x/z + cx;
+    float v = fy*y/z + cy;
+    return cv::Point2f(u, v);
+}

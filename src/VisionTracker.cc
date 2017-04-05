@@ -10,12 +10,26 @@ void VisionTracker::TrackMonocular(ImageFrame& f)
         refFrame = f;
         state = INITIALIZING;
     } else if (state == INITIALIZING) {
-        TryInitialize(f);
+        //TryInitialize(f);
+        TryInitializeByG2O(f);
     } else {
         f.opticalFlowFAST(refFrame);
         TrackPose3D2D(refFrame, f);
     }
 
+}
+
+void VisionTracker::TrackMonocularDirect(ImageFrame& f)
+{
+    if (state == NOTINITIALIZED) {
+        f.extractFAST();
+        refFrame = f;
+        state = INITIALIZING;
+    } else if (state == INITIALIZING) {
+        TryInitialize(f);
+    } else {
+        TrackPose3D2DDirect(refFrame, f);
+    }
 }
 
 void VisionTracker::TryInitialize(ImageFrame& f)
@@ -59,20 +73,20 @@ void VisionTracker::TryInitialize(ImageFrame& f)
 
     cv::Point2d principal_point(K->cx, K->cy);
     double focal_length = (K->fx + K->fy)/2;
-    cv::Mat inliners;
+    cv::Mat inliers;
     cv::Mat essential_matrix = cv::findEssentialMat(lp, rp, 
-            focal_length, principal_point, cv::RANSAC, 0.999, 1.0, inliners);
+            focal_length, principal_point, cv::RANSAC, 0.999, 1.0, inliers);
 
-    int num_inliners = 0;
+    int num_inliers = 0;
     for (int i = 0, _end = (int)lp.size(); i < _end; i++) {
-        if (inliners.at<unsigned char>(i) == 1)
-            ++num_inliners;
+        if (inliers.at<unsigned char>(i) == 1)
+            ++num_inliers;
     }
 
-    double ratio_inliners = (double)num_inliners / (int)lp.size();
+    double ratio_inliers = (double)num_inliers / (int)lp.size();
 
-    if (ratio_inliners < 0.9) {
-       printf("Initialize essential matrix inliners num too small!"
+    if (ratio_inliers < 0.9) {
+       printf("Initialize essential matrix inliers num too small!"
                " less than 0.9\n"); 
        return;
     }
@@ -92,6 +106,7 @@ void VisionTracker::TryInitialize(ImageFrame& f)
                 " Is %f\n", ratio_shift);
         return ;
     }
+
 
 
     cout << "R: " << endl
@@ -121,6 +136,201 @@ void VisionTracker::TryInitialize(ImageFrame& f)
 
     // Init Mapping
     map->InitMap(refFrame, f);
+
+    // Set state
+    state = INITIALIZED;
+
+}
+
+void VisionTracker::TryInitializeByG2O(ImageFrame& f)
+{
+
+    // Track FAST Points
+    f.opticalFlowFAST(refFrame);
+
+    // Track Pose 2D-2D
+    std::vector< cv::Point2f > lp, rp;
+    vector< int > pt_idx;
+    lp.reserve(f.undisTrackedPoints.size());
+    rp.reserve(f.undisTrackedPoints.size());
+    pt_idx.reserve(f.undisTrackedPoints.size());
+
+    for (int i = 0, _end = (int)f.undisTrackedPoints.size(); 
+            i < _end; i++ ) {
+        if (f.undisTrackedPoints[i].x > 0) {
+            lp.push_back(refFrame.undisPoints[i]);
+            rp.push_back(f.undisTrackedPoints[i]);
+            pt_idx.push_back(i);
+        }
+    }
+
+    // check tracked percent
+    double ratio_tracked = (double)lp.size() / 
+            (double)f.undisTrackedPoints.size();
+    if (ratio_tracked < 0.3) {
+        printf("Initialize Tracked points num too small!"
+                " less than 0.3\n");
+        return;
+    }
+
+    // check disparty
+    double disparty = 0;
+    for (int i = 0, _end = (int)lp.size(); i < _end; i++) {
+        disparty = disparty + (lp[i].x - rp[i].x)*(lp[i].x - rp[i].x)
+                + (lp[i].y - rp[i].y)*(lp[i].y - rp[i].y);
+    }
+    if ( disparty < 900.0 * (int)lp.size() ) {
+        printf("Initialize disparty too small, less than 30 average!\n");
+        return;
+    }
+    
+    // init by g2o
+    cout << "Set optimizer." << endl;
+
+    // Optimizer
+    g2o::SparseOptimizer optimizer;
+    
+    // linear solver
+    g2o::BlockSolver_6_3::LinearSolverType* linearSolver = new g2o::LinearSolverCSparse< g2o::BlockSolver_6_3::PoseMatrixType >();
+
+    // block solver
+    g2o::BlockSolver_6_3* block_solver = new g2o::BlockSolver_6_3( linearSolver );
+
+    // optimization algorithm
+    g2o::OptimizationAlgorithmLevenberg* algorithm = new g2o::OptimizationAlgorithmLevenberg( block_solver );
+
+    optimizer.setAlgorithm( algorithm );
+    optimizer.setVerbose( false );
+
+    cout << "add pose vertices." << endl;
+    // add pose vertices
+    g2o::VertexSE3Expmap* v1 = new g2o::VertexSE3Expmap();
+    v1->setId(0);
+    v1->setFixed(true);
+    v1->setEstimate(g2o::SE3Quat());
+    optimizer.addVertex(v1);
+
+    g2o::VertexSE3Expmap* v2 = new g2o::VertexSE3Expmap();
+    v2->setId(1);
+    v2->setEstimate(g2o::SE3Quat());
+    optimizer.addVertex(v2);
+
+    cout << "add 3d points vertices" << endl;
+    // add 3d point vertices
+    for (int i = 0, _end = (int)lp.size(); i < _end; i++) {
+        g2o::VertexSBAPointXYZ* v = new g2o::VertexSBAPointXYZ();
+        v->setId(2+i);
+        double z = 10;
+        double x = ( lp[i].x - K->cx ) / K->fx * z;
+        double y = ( lp[i].y - K->cy ) / K->fy * z;
+        v->setMarginalized(true);
+        v->setEstimate( Eigen::Vector3d(x, y, z) );
+        optimizer.addVertex( v );
+    }
+
+    cout << "add camera parameters" << endl;
+    // prepare camera parameters
+    g2o::CameraParameters* camera = new g2o::CameraParameters( (K->fx + K->fy)/2, Eigen::Vector2d(K->cx, K->cy), 0 );
+    camera->setId(0);
+    optimizer.addParameter(camera);
+
+    cout << "add edges" << endl;
+    // prepare edges
+    vector< g2o::EdgeProjectXYZ2UV* > edges;
+    for (int i = 0, _end = (int)lp.size(); i < _end; i++) {
+        g2o::EdgeProjectXYZ2UV* edge = new g2o::EdgeProjectXYZ2UV();
+        edge->setVertex( 0, dynamic_cast< g2o::VertexSBAPointXYZ* > (optimizer.vertex(i+2)) );
+        edge->setVertex( 1, dynamic_cast< g2o::VertexSE3Expmap* > (optimizer.vertex(0)) );
+
+        edge->setMeasurement( Eigen::Vector2d(lp[i].x, lp[i].y) );
+        edge->setInformation( Eigen::Matrix2d::Identity() );
+        edge->setParameterId(0, 0);
+
+        edge->setRobustKernel( new g2o::RobustKernelHuber() );
+        optimizer.addEdge( edge );
+        edges.push_back( edge );
+    }
+
+    for (int i = 0, _end = (int)rp.size(); i < _end; i++) {
+        g2o::EdgeProjectXYZ2UV* edge = new g2o::EdgeProjectXYZ2UV();
+        edge->setVertex( 0, dynamic_cast< g2o::VertexSBAPointXYZ* > (optimizer.vertex(i+2)) );
+        edge->setVertex( 1, dynamic_cast< g2o::VertexSE3Expmap* > (optimizer.vertex(1)) );
+
+        edge->setMeasurement( Eigen::Vector2d(rp[i].x, rp[i].y) );
+        edge->setInformation( Eigen::Matrix2d::Identity() );
+        edge->setParameterId(0, 0);
+
+        edge->setRobustKernel( new g2o::RobustKernelHuber() );
+        optimizer.addEdge( edge );
+        edges.push_back( edge );
+    }
+
+    cout << "optimization" << endl;
+    // optimization
+    optimizer.setVerbose(true);
+    optimizer.initializeOptimization();
+    optimizer.optimize(10);
+
+    // num of inliers
+    vector< int > inliers(edges.size()/2, 1);
+    int num_vert = (int)inliers.size();
+    for ( int i = 0, _end = (int)edges.size(); i < _end; i++) {
+        g2o::EdgeProjectXYZ2UV* e = edges[i];
+        e->computeError();
+        if (e->chi2() > 1) {
+            inliers[i%num_vert] = 0;
+            cout << "error = " << e->chi2() << endl;
+        } 
+    }
+    int num_inliers = 0;
+    for ( int i = 0, _end = (int)inliers.size(); i < _end; i++) {
+        num_inliers += inliers[i];
+    }
+    cout << "num inliers: " << num_inliers << endl;
+
+    // check inliers
+    double ratio_inlier = (double)num_inliers / (double)lp.size();
+    if (ratio_inlier < 0.8) {
+        printf("Inliers too small, less than 0.8 !\n");
+        return;
+    }
+
+    // SE3 estimate
+    g2o::VertexSE3Expmap* v = 
+            dynamic_cast< g2o::VertexSE3Expmap* >( optimizer.vertex(1) );
+    Eigen::Isometry3d pose = v->estimate();
+    // set optimization pose result, do not forget this step
+    Eigen::Matrix4d T = pose.matrix();
+    cv::Mat res;
+    cv::eigen2cv(T, res);
+    cv::Mat R = res.rowRange(0,3).colRange(0,3);
+    cv::Mat t = res.rowRange(0,3).col(3);
+    mR = f.R = R.t();
+    mt = f.t = -t;
+
+    cout << "mR: " << endl;
+    cout << mR <<  endl;
+
+    cout << "mt: " << endl;
+    cout << mt << endl;
+
+    // points estimate
+    for (int i = 0, _end = (int)lp.size(); i < _end; i++ ) {
+        if (inliers[i] == 0)
+            continue;
+        g2o::VertexSBAPointXYZ* v = 
+                dynamic_cast< g2o::VertexSBAPointXYZ* > 
+                ( optimizer.vertex(i+2) );
+        Eigen::Vector3d pos = v->estimate();
+        // set Mapping points and lf points
+        cv::Point3f* mpt = new cv::Point3f(pos[0], pos[1], pos[2]);
+        map->mapPoints.insert(mpt);
+        refFrame.map_2d_3d.insert(
+                Map_2d_3d_key_val(pt_idx[i], mpt));
+    }
+
+    // add keyFrame
+    map->keyFrames.push_back(&refFrame);
 
     // Set state
     state = INITIALIZED;
@@ -178,6 +388,156 @@ void VisionTracker::TrackPose2D2D(const ImageFrame& lf, ImageFrame& rf)
         << rf.mTcw << endl;
 }
 
+void VisionTracker::TrackPose2D2DG2O(ImageFrame& lf, ImageFrame& rf)
+{
+    // prepare points
+    vector< cv::Point2f > lp, rp;
+    vector< int > pt_idx;
+    lp.reserve(lf.undisPoints.size());
+    rp.reserve(lf.undisPoints.size());
+    pt_idx.reserve(lf.undisPoints.size());
+    for (int i = 0, _end = (int)lf.undisPoints.size(); i < _end; i++) {
+        if (rf.undisTrackedPoints[i].x > 0) {
+            lp.push_back(lf.undisPoints[i]);
+            rp.push_back(rf.undisTrackedPoints[i]);
+            pt_idx.push_back(i);
+        }
+    }
+    cout << "Get points num: " << lp.size() << endl;
+
+    cout << "Set optimizer." << endl;
+    // Optimizer
+    g2o::SparseOptimizer optimizer;
+    
+    // linear solver
+    g2o::BlockSolver_6_3::LinearSolverType* linearSolver = new g2o::LinearSolverCSparse< g2o::BlockSolver_6_3::PoseMatrixType >();
+
+    // block solver
+    g2o::BlockSolver_6_3* block_solver = new g2o::BlockSolver_6_3( linearSolver );
+
+    // optimization algorithm
+    g2o::OptimizationAlgorithmLevenberg* algorithm = new g2o::OptimizationAlgorithmLevenberg( block_solver );
+
+    optimizer.setAlgorithm( algorithm );
+    optimizer.setVerbose( false );
+
+    cout << "add pose vertices." << endl;
+    // add pose vertices
+    g2o::VertexSE3Expmap* v1 = new g2o::VertexSE3Expmap();
+    v1->setId(0);
+    v1->setFixed(true);
+    v1->setEstimate(g2o::SE3Quat());
+    optimizer.addVertex(v1);
+
+    g2o::VertexSE3Expmap* v2 = new g2o::VertexSE3Expmap();
+    v2->setId(1);
+    v2->setEstimate(g2o::SE3Quat());
+    optimizer.addVertex(v2);
+
+    cout << "add 3d points vertices" << endl;
+    // add 3d point vertices
+    for (int i = 0, _end = (int)lp.size(); i < _end; i++) {
+        g2o::VertexSBAPointXYZ* v = new g2o::VertexSBAPointXYZ();
+        v->setId(2+i);
+        double z = 1;
+        double x = ( lp[i].x - K->cx ) / K->fx;
+        double y = ( lp[i].y - K->cy ) / K->fy;
+        v->setMarginalized(true);
+        v->setEstimate( Eigen::Vector3d(x, y, z) );
+        optimizer.addVertex( v );
+    }
+
+    cout << "add camera parameters" << endl;
+    // prepare camera parameters
+    g2o::CameraParameters* camera = new g2o::CameraParameters( (K->fx + K->fy)/2, Eigen::Vector2d(K->cx, K->cy), 0 );
+    camera->setId(0);
+    optimizer.addParameter(camera);
+
+    cout << "add edges" << endl;
+    // prepare edges
+    vector< g2o::EdgeProjectXYZ2UV* > edges;
+    for (int i = 0, _end = (int)lp.size(); i < _end; i++) {
+        g2o::EdgeProjectXYZ2UV* edge = new g2o::EdgeProjectXYZ2UV();
+        edge->setVertex( 0, dynamic_cast< g2o::VertexSBAPointXYZ* > (optimizer.vertex(i+2)) );
+        edge->setVertex( 1, dynamic_cast< g2o::VertexSE3Expmap* > (optimizer.vertex(0)) );
+
+        edge->setMeasurement( Eigen::Vector2d(lp[i].x, lp[i].y) );
+        edge->setInformation( Eigen::Matrix2d::Identity() );
+        edge->setParameterId(0, 0);
+
+        edge->setRobustKernel( new g2o::RobustKernelHuber() );
+        optimizer.addEdge( edge );
+        edges.push_back( edge );
+    }
+
+    for (int i = 0, _end = (int)rp.size(); i < _end; i++) {
+        g2o::EdgeProjectXYZ2UV* edge = new g2o::EdgeProjectXYZ2UV();
+        edge->setVertex( 0, dynamic_cast< g2o::VertexSBAPointXYZ* > (optimizer.vertex(i+2)) );
+        edge->setVertex( 1, dynamic_cast< g2o::VertexSE3Expmap* > (optimizer.vertex(1)) );
+
+        edge->setMeasurement( Eigen::Vector2d(rp[i].x, rp[i].y) );
+        edge->setInformation( Eigen::Matrix2d::Identity() );
+        edge->setParameterId(0, 0);
+
+        edge->setRobustKernel( new g2o::RobustKernelHuber() );
+        optimizer.addEdge( edge );
+        edges.push_back( edge );
+    }
+
+    cout << "optimization" << endl;
+    // optimization
+    optimizer.setVerbose(true);
+    optimizer.initializeOptimization();
+    optimizer.optimize(10);
+
+    // SE3 estimate
+    g2o::VertexSE3Expmap* v = 
+            dynamic_cast< g2o::VertexSE3Expmap* >( optimizer.vertex(1) );
+    Eigen::Isometry3d pose = v->estimate();
+    // set optimization pose result, do not forget this step
+    Eigen::Matrix4d T = pose.matrix();
+    cv::Mat res;
+    cv::eigen2cv(T, res);
+    cv::Mat R = res.rowRange(0,3).colRange(0,3);
+    cv::Mat t = res.rowRange(0,3).col(3);
+    mR = rf.R = R.t();
+    mt = rf.t = -t;
+
+    cout << "mR: " << endl;
+    cout << mR <<  endl;
+
+    cout << "mt: " << endl;
+    cout << mt << endl;
+
+    // points estimate
+    for (int i = 0, _end = (int)lp.size(); i < _end; i++ ) {
+        g2o::VertexSBAPointXYZ* v = 
+                dynamic_cast< g2o::VertexSBAPointXYZ* > 
+                ( optimizer.vertex(i+2) );
+        Eigen::Vector3d pos = v->estimate();
+        // set Mapping points and lf points
+        cv::Point3f* mpt = new cv::Point3f(pos[0], pos[1], pos[2]);
+        map->mapPoints.insert(mpt);
+        lf.map_2d_3d.insert(
+                Map_2d_3d_key_val(pt_idx[i], mpt));
+    }
+
+    // add keyFrame
+    map->keyFrames.push_back(&lf);
+
+    // num of inliers
+    int inliers = 0;
+    for (auto e:edges ) {
+        e->computeError();
+        if (e->chi2() > 1) {
+            cout << "error = " << e->chi2() << endl;
+        } else {
+            inliers++;
+        }
+    }
+    cout << "num inliers: " << inliers << endl;
+}
+
 void VisionTracker::TrackPose3D2D(const ImageFrame& lf, ImageFrame& rf)
 {
     cv::Mat KMat = 
@@ -225,8 +585,9 @@ void VisionTracker::TrackPose3D2D(const ImageFrame& lf, ImageFrame& rf)
     so3 = TooN::SO3<>::exp(w);
     Converter::TooNSO3_Mat(so3, R);
 
-    mR = R.t();
-    mt = -t;
+    rf.R = mR = R.t();
+    rf.t = mt = -t;
+
 }
 
 void VisionTracker::bundleAdjustment3D2D(
@@ -302,6 +663,100 @@ void VisionTracker::bundleAdjustment3D2D(
     R = res.rowRange(0,3).colRange(0,3);
     t = res.rowRange(0,3).col(3);
 
+}
+
+void VisionTracker::TrackPose3D2DDirect(const ImageFrame& lf, ImageFrame& rf)
+{
+    // construcet 3d measurements
+    vector< Measurement > measurements; 
+    measurements.reserve(lf.points.size());
+    for (Map_2d_3d::const_iterator iter = lf.map_2d_3d.begin(), 
+            i_end = lf.map_2d_3d.end(); iter != i_end; iter++) {
+
+        cv::Point3f* p_p3d = iter->right;
+        const cv::Point2f* p_p2d = &(lf.points[iter->left]);
+
+        Eigen::Vector3d p3d(p_p3d->x, p_p3d->y, p_p3d->z);
+        float grayscale = float( 
+                lf.image.at<unsigned char>(p_p2d->y, p_p2d->x) );
+        measurements.push_back( Measurement(p3d, grayscale) );
+    }
+
+    // 初始化g2o
+    typedef g2o::BlockSolver<g2o::BlockSolverTraits<6,1>> DirectBlock;  // 求解的向量是6＊1的
+    DirectBlock::LinearSolverType* linearSolver = 
+            new g2o::LinearSolverDense< DirectBlock::PoseMatrixType > ();
+    DirectBlock* solver_ptr = new DirectBlock ( linearSolver );
+    // g2o::OptimizationAlgorithmGaussNewton* solver = 
+    //      new g2o::OptimizationAlgorithmGaussNewton( solver_ptr ); // G-N
+    g2o::OptimizationAlgorithmLevenberg* solver = 
+        new g2o::OptimizationAlgorithmLevenberg ( solver_ptr ); // L-M
+    g2o::SparseOptimizer optimizer;
+    optimizer.setAlgorithm ( solver );
+    optimizer.setVerbose( true );
+
+    g2o::VertexSE3Expmap* pose = new g2o::VertexSE3Expmap();
+    Eigen::Matrix3d R_mat;
+    cv::cv2eigen(lf.R.t(), R_mat);
+    pose->setEstimate ( g2o::SE3Quat (
+                R_mat,
+                Eigen::Vector3d ( -lf.t.at<double> ( 0,0 ),
+                    -lf.t.at<double> ( 1,0 ),
+                    -lf.t.at<double> ( 2,0 ) )
+                ) );
+    pose->setId ( 0 );
+    optimizer.addVertex ( pose );
+
+    // 添加边
+    int id=1;
+    for ( Measurement m: measurements )
+    {
+        EdgeSE3ProjectDirect* edge = new EdgeSE3ProjectDirect (
+                m.pos_world,
+                K->fx, K->fy, K->cx, K->cy, &rf.image
+                );
+        edge->setVertex ( 0, pose );
+        edge->setMeasurement ( m.grayscale );
+        edge->setInformation ( Eigen::Matrix<double,1,1>::Identity() );
+        edge->setId ( id++ );
+        optimizer.addEdge ( edge );
+    }
+    cout<<"edges in graph: "<<optimizer.edges().size() <<endl;
+    optimizer.initializeOptimization();
+    optimizer.optimize ( 30 );
+    //Tcw = pose->estimate();
+
+    // set optimization result back, do not forget this step
+    Eigen::Matrix4d T = Eigen::Isometry3d ( pose->estimate() ).matrix();
+    cv::Mat res;
+    cv::eigen2cv(T, res);
+    cv::Mat R = res.rowRange(0,3).colRange(0,3);
+    cv::Mat t = res.rowRange(0,3).col(3);
+
+    // use Median filter to make the result stable
+    TooN::SO3<> so3;
+    Converter::Mat_TooNSO3(R, so3);
+    TooN::Vector<3> w = so3.ln(); 
+    w[0] = medianFilter[0].filterAdd(w[0]);
+    w[1] = medianFilter[1].filterAdd(w[1]);
+    w[2] = medianFilter[2].filterAdd(w[2]);
+    t.at<double>(0) = medianFilter[3].filterAdd(t.at<double>(0));
+    t.at<double>(1) = medianFilter[4].filterAdd(t.at<double>(1));
+    t.at<double>(2) = medianFilter[5].filterAdd(t.at<double>(2));
+    so3 = TooN::SO3<>::exp(w);
+    Converter::TooNSO3_Mat(so3, R);
+
+    rf.R = mR = R.t();
+    rf.t = mt = -t;
+}
+
+void VisionTracker::poseEstimationDirect(
+        const vector< Measurement >& measurements, 
+        cv::Mat* gray, 
+        Eigen::Matrix3f& K, 
+        Eigen::Isometry3d& Tcw )
+{
+    
 }
 
 cv::Mat VisionTracker::GetTcwMatNow()

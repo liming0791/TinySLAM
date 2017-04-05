@@ -36,6 +36,9 @@ class CameraIntrinsic
 
         cv::Point2f pixel2device(float x, float y);
         cv::Point2f device2pixel(float u, float v);
+
+        cv::Point3f Proj2Dto3D(float x, float y, float d);
+        cv::Point2f Proj3Dto2D(float x, float y, float z);
 };
 
 #endif

@@ -41,7 +41,23 @@ bool CameraDevice::openDataset(const string& filename)
     file.open(filename);
     if ( !file.is_open() ) {
         printf("Open dataset %s failed!\n", filename.c_str());
+        return false;
     }
+
+    // test read the first image
+    if (getline(file, frameName) ) {
+        Frame = cv::imread(frameName);
+        if (Frame.empty()) {
+            printf("Open dataset %s failed! Test first image %s failed!\n", filename.c_str(), frameName.c_str());
+            return false;
+        }
+        file.clear();
+        file.seekg(0, ios::beg);
+    } else {
+        printf("Open dataset %s failed! Get line failed!\n", filename.c_str());
+        return false;
+    }
+
     sourceType = DATASET;
     return true;
 }
