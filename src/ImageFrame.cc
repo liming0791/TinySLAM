@@ -25,11 +25,11 @@ ImageFrame::ImageFrame(const ImageFrame& imgFrame):
     
 }
 
-void ImageFrame::extractFAST()
+void ImageFrame::extractFAST(int lowNum, int highNum)
 {
     int thres = 40;
-    int low = 400;
-    int high = 500;
+    int low = lowNum;
+    int high = highNum;
     cv::FAST(image, keyPoints, thres);
 
     int iter = 0;

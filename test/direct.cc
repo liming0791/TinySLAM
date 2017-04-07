@@ -35,7 +35,9 @@ int main(int argc, char** argv)
     Viewer viewer(&map, &tracker);
     std::thread* ptViewer = new std::thread(&Viewer::run, &viewer);
 
-    bool started = false;
+    ImageFrame *refImgFrame = NULL;
+    ImageFrame lastFrame;
+    bool isFirst = true;
     char cmd = ' ';
     while (true) {
 
@@ -46,30 +48,58 @@ int main(int argc, char** argv)
             break;
         }
 
+        // blur with 3
+        //cv::GaussianBlur(Frame, Frame, cv::Size(7,7), 0); 
+
         if (cmd == 's') {
-            tracker.reset();
-            started = true;
-        }
+            if (isFirst) {              // fisrt 's'
+                refImgFrame = new ImageFrame(Frame, &K1); 
+                refImgFrame->extractFAST(1200, 1400);       // extract more FAST points
+                //lastFrame = *refImgFrame;
+                map.ClearMap();
+                isFirst = false;
+            } else {                                // second 's'
+                if ( refImgFrame != NULL ) {
 
-        if (started) {
-            ImageFrame newImgFrame(Frame, &K1);
-            tracker.TrackMonocularDirect(newImgFrame);
+                    ImageFrame newImgFrame;
+                    
+                    TIME_BEGIN()
+                    newImgFrame = ImageFrame(Frame, &K1);
+                    TIME_END("New Image Frame")
 
-            for (int i = 0, _end = (int)tracker.refFrame.points.size(); i < _end; i++) { // draw result
-                if (tracker.state != tracker.INITIALIZED) {
-                    if (newImgFrame.trackedPoints[i].x > 0) {
-                        cv::line(Frame, tracker.refFrame.points[i], 
-                            newImgFrame.trackedPoints[i],
-                            cv::Scalar(255, 0, 0));
-                    }
-                } else {
-                    //if (newImgFrame.trackedPoints[i].x > 0) {
-                    //    cv::line(Frame, tracker.refFrame.points[i], 
-                    //        newImgFrame.trackedPoints[i],
-                    //        cv::Scalar(0, 255, 0));
-                    //}
-                }
+                    // optical flow result
+                    newImgFrame.opticalFlowFAST(*refImgFrame);
+                    tracker.TrackPose2D2D(*refImgFrame, newImgFrame);
+                    map.InitMap(*refImgFrame, newImgFrame);
+
+                    isFirst = true;
+                }    
             }
+        } else {                                
+            if ( refImgFrame != NULL ) {
+                ImageFrame newImgFrame;
+                    
+                TIME_BEGIN()
+                newImgFrame = ImageFrame(Frame, &K1);
+                TIME_END("New Image Frame")
+
+                // optical flow result
+                TIME_BEGIN()
+                newImgFrame.opticalFlowFAST(*refImgFrame);
+                TIME_END("OpticalFlowFast")
+
+                TIME_BEGIN()
+                tracker.TrackPose3D2DDirect(*refImgFrame, newImgFrame);
+                TIME_END("TrackPose3D2D")
+
+                for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); i < _end; i++) { // draw result
+                    if (newImgFrame.trackedPoints[i].x > 0) {
+                        cv::line(Frame, refImgFrame->points[i], 
+                                newImgFrame.trackedPoints[i],
+                                cv::Scalar(0, 255, 0));
+                    }
+                }
+            }    
         }
 
         TIME_END("One Frame")

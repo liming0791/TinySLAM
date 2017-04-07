@@ -51,7 +51,7 @@ class ImageFrame
         explicit ImageFrame(const cv::Mat& frame, CameraIntrinsic* _K);
         explicit ImageFrame(const ImageFrame& imgFrame);
 
-        void extractFAST();
+        void extractFAST(int lowNum = 400, int highNum = 500);
         void extractPatch();
         void computePatchDescriptorAtPoint(
                 const cv::Point2f &pt, 

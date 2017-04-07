@@ -685,7 +685,7 @@ void VisionTracker::TrackPose3D2DDirect(const ImageFrame& lf, ImageFrame& rf)
     // 初始化g2o
     typedef g2o::BlockSolver<g2o::BlockSolverTraits<6,1>> DirectBlock;  // 求解的向量是6＊1的
     DirectBlock::LinearSolverType* linearSolver = 
-            new g2o::LinearSolverDense< DirectBlock::PoseMatrixType > ();
+            new g2o::LinearSolverCSparse< DirectBlock::PoseMatrixType > ();
     DirectBlock* solver_ptr = new DirectBlock ( linearSolver );
     // g2o::OptimizationAlgorithmGaussNewton* solver = 
     //      new g2o::OptimizationAlgorithmGaussNewton( solver_ptr ); // G-N
@@ -695,6 +695,7 @@ void VisionTracker::TrackPose3D2DDirect(const ImageFrame& lf, ImageFrame& rf)
     optimizer.setAlgorithm ( solver );
     optimizer.setVerbose( true );
 
+    // add pose vertex
     g2o::VertexSE3Expmap* pose = new g2o::VertexSE3Expmap();
     Eigen::Matrix3d R_mat;
     cv::cv2eigen(lf.R.t(), R_mat);
@@ -707,7 +708,8 @@ void VisionTracker::TrackPose3D2DDirect(const ImageFrame& lf, ImageFrame& rf)
     pose->setId ( 0 );
     optimizer.addVertex ( pose );
 
-    // 添加边
+
+    // add measurement edges
     int id=1;
     for ( Measurement m: measurements )
     {
