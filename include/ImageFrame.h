@@ -47,18 +47,24 @@ class ImageFrame
         ImageFrame* mRefFrame;                 // Reference Frame
         CameraIntrinsic* K;                    // CameraIntrinsic
 
+        bool isKeyFrame;
+        vector< int > ref;                     // points reference to last keyFrame
+                                               // only used for key frame
+
         ImageFrame() = default;
         explicit ImageFrame(const cv::Mat& frame, CameraIntrinsic* _K);
         explicit ImageFrame(const ImageFrame& imgFrame);
 
         void extractFAST(int lowNum = 400, int highNum = 500);
         void extractPatch();
+        cv::Mat extractTrackedPatch();
         void computePatchDescriptorAtPoint(
                 const cv::Point2f &pt, 
                 const cv::Mat &im,
                 float* desc);
         void trackPatchFAST(ImageFrame& refFrame);
-        void opticalFlowFAST(ImageFrame& refFrame);
+        int opticalFlowFAST(ImageFrame& refFrame);
+        vector< int > fuseFAST();
         void opticalFlowTrackedFAST(ImageFrame& lastFrame);
         void SBITrackFAST(ImageFrame& refFrame);
 

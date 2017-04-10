@@ -92,30 +92,47 @@ target_link_libraries(${PROJECT_NAME}
 
 # Build examples
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
+
 add_executable(testCameraDevice
 test/test.cc)
 target_link_libraries(testCameraDevice ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+
 add_executable(testUndistort
 test/udistort.cc)
 target_link_libraries(testUndistort ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+
 add_executable(test2D2D
 test/test2D2D.cc)
 target_link_libraries(test2D2D ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+
 add_executable(testView
 test/view.cc)
 target_link_libraries(testView ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+
 add_executable(testConverter
 test/converter.cc)
 target_link_libraries(testConverter ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+
 add_executable(testAutoInit
 test/autoinit.cc)
 target_link_libraries(testAutoInit ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+
 add_executable(testDirect
 test/direct.cc)
 target_link_libraries(testDirect ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+
 add_executable(test2D2DG2O
 test/test2D2DG2O.cc)
 target_link_libraries(test2D2DG2O ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+
 add_executable(testPatch
 test/patch.cc)
 target_link_libraries(testPatch ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+
+add_executable(testFuseFAST
+    test/fuseFAST.cc)
+target_link_libraries(testFuseFAST ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+
+add_executable(testNewKeyFrame
+    test/newKeyFrame.cc)
+target_link_libraries(testNewKeyFrame ${OpenCV_LIBRARIES} ${PROJECT_NAME} )

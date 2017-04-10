@@ -58,14 +58,14 @@ int main(int argc, char** argv)
             tracker.TrackMonocular(newImgFrame);
             TIME_END("One Frame")
 
-            for (int i = 0, _end = (int)tracker.refFrame.points.size(); i < _end; i++) { // draw result
+            for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); i < _end; i++) { // draw result
                 if (newImgFrame.trackedPoints[i].x > 0) {
                     if (tracker.state != tracker.INITIALIZED) {
-                        cv::line(Frame, tracker.refFrame.points[i], 
+                        cv::line(Frame, newImgFrame.mRefFrame->points[i], 
                             newImgFrame.trackedPoints[i],
                             cv::Scalar(255, 0, 0));
                     } else {
-                        cv::line(Frame, tracker.refFrame.points[i], 
+                        cv::line(Frame, newImgFrame.mRefFrame->points[i], 
                             newImgFrame.trackedPoints[i],
                             cv::Scalar(0, 255, 0));
                     }

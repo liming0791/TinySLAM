@@ -10,23 +10,22 @@ void Viewer::run()
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // TODO::Create menu
-    pangolin::OpenGlRenderState s_cam(
+    s_cam = new pangolin::OpenGlRenderState(
             pangolin::ProjectionMatrix(1024, 768, 500, 500, 
             512, 389, 0.1, 1000),
             pangolin::ModelViewLookAt(0, -5, -10, 0, 0, 0, 0, -1, 0)
             );
 
-    pangolin::View& d_cam = pangolin::CreateDisplay()
+    d_cam = & ( pangolin::CreateDisplay()
         .SetBounds(0, 1, pangolin::Attach::Pix(175), 1.f, -1024.f/768.f)
-        .SetHandler(new pangolin::Handler3D(s_cam));
+        .SetHandler(new pangolin::Handler3D(*s_cam)) );
 
-    pangolin::OpenGlMatrix M;
     M.SetIdentity();
 
     while(1) {
         glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        d_cam.Activate(s_cam);
+        d_cam->Activate(*s_cam);
         glClearColor(1.f, 1.f, 1.f, 1.f);
 
         drawCameraNow();
@@ -43,6 +42,47 @@ void Viewer::run()
             break;
     }
 
+}
+
+void Viewer::init()
+{
+    pangolin::CreateWindowAndBind("Viewer", 1024, 768);
+
+    glEnable(GL_DEPTH_TEST);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // TODO::Create menu
+    s_cam = new pangolin::OpenGlRenderState(
+            pangolin::ProjectionMatrix(1024, 768, 500, 500, 
+            512, 389, 0.1, 1000),
+            pangolin::ModelViewLookAt(0, -5, -10, 0, 0, 0, 0, -1, 0)
+            );
+
+    d_cam = & ( pangolin::CreateDisplay()
+        .SetBounds(0, 1, pangolin::Attach::Pix(175), 1.f, -1024.f/768.f)
+        .SetHandler(new pangolin::Handler3D(*s_cam)) );
+
+    M.SetIdentity();
+}
+
+void Viewer::requestDraw()
+{
+    glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    d_cam->Activate(*s_cam);
+    glClearColor(1.f, 1.f, 1.f, 1.f);
+
+    drawCameraNow();
+
+    drawKeyFrames();
+
+    drawMapPoints();
+
+    drawMapAxis();
+
+    pangolin::FinishFrame();
 }
 
 void Viewer::drawCameraNow()
@@ -94,9 +134,22 @@ void Viewer::drawKeyFrames()
     const float h = w*0.75;
     const float z = w*0.6;
 
+    static int count = 0;
+
+    count++;
+    if (count == 100) {
+        printf("Viewer: Draw %d keyframes\n", (int)map->keyFrames.size());
+        count=0;
+    }
+    
     for (int i = 0, _end = (int)map->keyFrames.size(); i < _end; i++) {
         ImageFrame* pKF = map->keyFrames[i];
         cv::Mat Tcw = pKF->GetTcwMat().t();
+
+        if (count == 0) {
+            cout << "Viewer: Draw keyframe " << i << " :" << endl;
+            cout << Tcw << endl;
+        }
 
         glPushMatrix();
 

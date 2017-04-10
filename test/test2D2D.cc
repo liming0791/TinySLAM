@@ -61,14 +61,14 @@ int main(int argc, char** argv)
         }
 
         // If is dataset, control at each image
-        if (isDataset) {
+        if (isDataset || isVideo) {
             cmd = cv::waitKey(-1);
         }
 
         // If is video , start at begining
-        if (isVideo) {
-            cmd = 's';
-        }
+        //if (isVideo) {
+        //    cmd = 's';
+        //}
 
         if (cmd == 's') {
             if (isFirst) {              // fisrt 's'

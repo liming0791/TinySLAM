@@ -43,7 +43,10 @@ void Mapping::InitMap(ImageFrame& lf, ImageFrame& rf)
                 Map_2d_3d_key_val(pt_idx[i], mpt));     
     }
 
-    keyFrames.push_back(&lf);
+    // add keyFrame
+    ImageFrame * nkf = new ImageFrame(lf);
+    nkf->isKeyFrame = true;
+    keyFrames.push_back(nkf);
 
 }
 

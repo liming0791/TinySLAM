@@ -17,6 +17,7 @@ using namespace std;
 int main(int argc, char** argv)
 {
 
+    // camera device 
     CameraIntrinsic K1(argv[1]);
     CameraDevice camera1(K1);
     printf("Camera1: %f %f %f %f %f %f %d %d\n", camera1.K.cx , camera1.K.cy ,camera1.K.fx ,camera1.K.fy ,
@@ -47,14 +48,15 @@ int main(int argc, char** argv)
 
     Viewer viewer(&map, &tracker);
     std::thread* ptViewer = new std::thread(&Viewer::run, &viewer);
+    //viewer.init();
 
-    ImageFrame *refImgFrame = NULL;
-
-    bool isFirst = true;
+    bool started = false;
     char cmd = ' ';
     cv::namedWindow("result");
 
     while (true) {
+
+
         if ( !camera1.getFrame(Frame, camera1.BGR) ) {
             printf("Get Frame failed!\n");
             break;
@@ -65,58 +67,61 @@ int main(int argc, char** argv)
             cmd = cv::waitKey(-1);
         }
 
-        // If is video , start at begining
-        //if (isVideo) {
-        //    cmd = 's';
-        //}
-
         if (cmd == 's') {
-            if (isFirst) {              // fisrt 's'
-                refImgFrame = new ImageFrame(Frame, &K1); 
-                TIME_BEGIN()
-                refImgFrame->extractFAST();
-                TIME_END("FAST")
-                isFirst = false;
-            } else {                                // second 's'
-                if ( refImgFrame != NULL ) {
-                    ImageFrame newImgFrame(Frame, &K1);
-                    // optical flow result
-                    newImgFrame.opticalFlowFAST(*refImgFrame);
-                    TIME_BEGIN()
-                    tracker.TrackPose2D2DG2O(*refImgFrame, newImgFrame);
-                    TIME_END("Init 2D2DG2O: ")
-                    isFirst = true;
-                    for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); i < _end; i++) { // draw result
-                        if (newImgFrame.trackedPoints[i].x > 0) {
-                            cv::line(Frame, refImgFrame->points[i], 
+            tracker.reset();
+            started = true;
+        }
+
+        if (started) {
+
+            ImageFrame newImgFrame(Frame, &K1);
+
+            TIME_BEGIN()
+            tracker.TrackMonocular(newImgFrame);
+            TIME_END("One Frame")
+
+            //viewer.requestDraw();
+
+            if (newImgFrame.isKeyFrame) {
+
+                printf("Draw KeyFrame...\n");
+
+                for (int i = 0, _end = (int)newImgFrame.points.size(); i < _end; i++) {
+                    cv::circle(Frame, newImgFrame.points[i], 2, cv::Scalar(0,0,255));
+                    if (newImgFrame.ref[i] > 0) {
+                        // draw fuse ref
+                        cv::line(Frame, newImgFrame.points[i], newImgFrame.trackedPoints[newImgFrame.ref[i]], cv::Scalar(255,0,0));
+                        // draw match fast
+                        cv::line(Frame, newImgFrame.points[i], newImgFrame.mRefFrame->points[newImgFrame.ref[i]], cv::Scalar(0,255,0));
+                    }
+                }
+
+            } else {
+                
+                printf("Draw internal Frame...\n");
+
+                for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); i < _end; i++) { // draw result
+                    if (newImgFrame.trackedPoints[i].x > 0) {
+                        if (tracker.state != tracker.INITIALIZED) {
+                            cv::line(Frame, newImgFrame.mRefFrame->points[i], 
+                                    newImgFrame.trackedPoints[i],
+                                    cv::Scalar(255, 0, 0));
+                        } else {
+                            cv::line(Frame, newImgFrame.mRefFrame->points[i], 
                                     newImgFrame.trackedPoints[i],
                                     cv::Scalar(0, 255, 0));
                         }
                     }
-                }    
-            }
-        } else {                                
-            if ( refImgFrame != NULL ) {
-                ImageFrame newImgFrame(Frame, &K1);
-                // optical flow result
-                newImgFrame.opticalFlowFAST(*refImgFrame);
-                for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); i < _end; i++) { // draw result
-                    if (newImgFrame.trackedPoints[i].x > 0) {
-                        cv::line(Frame, refImgFrame->points[i], 
-                                newImgFrame.trackedPoints[i],
-                                cv::Scalar(0, 255, 0));
-                    }
+                    cv::circle(Frame, newImgFrame.mRefFrame->points[i], 
+                            2,
+                            cv::Scalar(0, 0, 0));
                 }
-            }    
+            }
         }
 
         cv::imshow("result",Frame);
         cmd = cv::waitKey(33);
     }
-
-    cv::waitKey();
-
-    viewer.requestFinish();
 
     return 0;
 }

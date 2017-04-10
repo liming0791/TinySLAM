@@ -78,33 +78,39 @@ int main(int argc, char** argv)
                 TIME_END("FAST")
                 isFirst = false;
             } else {                                // second 's'
-                if ( refImgFrame != NULL ) {
-                    ImageFrame newImgFrame(Frame, &K1);
-                    // optical flow result
-                    newImgFrame.opticalFlowFAST(*refImgFrame);
-                    TIME_BEGIN()
-                    tracker.TrackPose2D2DG2O(*refImgFrame, newImgFrame);
-                    TIME_END("Init 2D2DG2O: ")
-                    isFirst = true;
-                    for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); i < _end; i++) { // draw result
-                        if (newImgFrame.trackedPoints[i].x > 0) {
-                            cv::line(Frame, refImgFrame->points[i], 
-                                    newImgFrame.trackedPoints[i],
-                                    cv::Scalar(0, 255, 0));
-                        }
-                    }
-                }    
+                    
             }
         } else {                                
             if ( refImgFrame != NULL ) {
                 ImageFrame newImgFrame(Frame, &K1);
                 // optical flow result
                 newImgFrame.opticalFlowFAST(*refImgFrame);
+                newImgFrame.extractFAST();
+                vector<int> ref = newImgFrame.fuseFAST();
+
                 for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); i < _end; i++) { // draw result
                     if (newImgFrame.trackedPoints[i].x > 0) {
                         cv::line(Frame, refImgFrame->points[i], 
                                 newImgFrame.trackedPoints[i],
                                 cv::Scalar(0, 255, 0));
+                    }
+                }
+
+                for (int i = 0, _end = (int)newImgFrame.points.size(); i < _end; i++) { // draw result
+                    if (newImgFrame.points[i].x > 0) {
+                        
+                        if (ref[i] > 0) {
+                            cv::circle(Frame, newImgFrame.points[i], 
+                                2,
+                                cv::Scalar(255, 255, 0));
+                            cv::line(Frame, newImgFrame.points[i],
+                                    newImgFrame.trackedPoints[ref[i]],
+                                    cv::Scalar(255, 0, 0));
+                        } else {
+                            cv::circle(Frame, newImgFrame.points[i], 
+                                2,
+                                cv::Scalar(0, 0, 255));
+                        }
                     }
                 }
             }    

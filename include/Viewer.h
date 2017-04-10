@@ -18,6 +18,8 @@ class Viewer
                 tracker(_tracker), isFinished(false) {};
 
         void run();
+        void init();
+        void requestDraw();
         void requestFinish();
         bool checkFinished();
         void drawKeyFrames();
@@ -31,5 +33,9 @@ class Viewer
 
         std::mutex mMutexFinish;
         bool isFinished;
+
+        pangolin::OpenGlRenderState* s_cam;
+        pangolin::View* d_cam;
+        pangolin::OpenGlMatrix M;
 
 };
