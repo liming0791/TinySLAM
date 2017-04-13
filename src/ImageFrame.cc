@@ -99,8 +99,8 @@ vector< int > ImageFrame::fuseFAST()
         }
     }
 
-    trackedPoints = points;
-    undisTrackedPoints = undisPoints;
+    //trackedPoints = points;
+    //undisTrackedPoints = undisPoints;
 
     return ref;
 }
@@ -343,12 +343,12 @@ void ImageFrame::opticalFlowTrackedFAST(ImageFrame& lastFrame)
     }
 
     // essential matrix estimation validation
-    cv::Mat inlier;
-    TIME_BEGIN()
-    cv::findEssentialMat(undis_pts, undis_flow_pts, 
-            (K->fx + K->fy)/2, cv::Point2d(K->cx, K->cy),
-            cv::RANSAC, 0.9999, 2, inlier);
-    TIME_END("essential matrix estimation")
+    //cv::Mat inlier;
+    //TIME_BEGIN()
+    //cv::findEssentialMat(undis_pts, undis_flow_pts, 
+    //        (K->fx + K->fy)/2, cv::Point2d(K->cx, K->cy),
+    //        cv::RANSAC, 0.9999, 2, inlier);
+    //TIME_END("essential matrix estimation")
 
     trackedPoints.resize(lastFrame.trackedPoints.size());
     undisTrackedPoints.resize(lastFrame.trackedPoints.size());
@@ -357,12 +357,12 @@ void ImageFrame::opticalFlowTrackedFAST(ImageFrame& lastFrame)
     fill(undisTrackedPoints.begin(), 
             undisTrackedPoints.end(), cv::Point2f(0,0));
     for (int i = 0, _end = (int)undis_flow_pts.size(); i < _end; i++) {
-        if (inlier.at<unsigned char>(i) == 1) {
+        //if (inlier.at<unsigned char>(i) == 1) {
           trackedPoints[idxs[i]] = flow_pts[i];
           undisTrackedPoints[idxs[i]] = undis_flow_pts[i];
-        } else {
+        //} else {
 
-        }
+        //}
     }
 
 }

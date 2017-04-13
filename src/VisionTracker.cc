@@ -434,9 +434,13 @@ void VisionTracker::InsertKeyFrame(ImageFrame& kf, ImageFrame& f)
         }
     }
 
-    // insert keyFrame 
+    // keyFrame 
     f.isKeyFrame = true;
+
+    // make new keyframe
     ImageFrame * nkf = new ImageFrame(f);
+    nkf->trackedPoints = nkf->points;
+    nkf->undisTrackedPoints = nkf->undisPoints;
     map->keyFrames.push_back(nkf);
 
     // update refFrame
@@ -1191,6 +1195,7 @@ double VisionTracker::TrackFeatureOpticalFlow(ImageFrame& f)
 {
     // optical flow fast feature by lastframe
     f.opticalFlowTrackedFAST(lastFrame);
+    f.mRefFrame = refFrame;
 
     // check essentialmat with refFrame
     vector< int > pt_idx;
