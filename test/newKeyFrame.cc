@@ -77,7 +77,7 @@ int main(int argc, char** argv)
             ImageFrame newImgFrame(Frame, &K1);
 
             TIME_BEGIN()
-            tracker.TrackMonocular(newImgFrame);
+            tracker.TrackMonocularNewKeyFrame(newImgFrame);
             TIME_END("One Frame")
 
             //viewer.requestDraw();

@@ -136,3 +136,7 @@ target_link_libraries(testFuseFAST ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
 add_executable(testNewKeyFrame
     test/newKeyFrame.cc)
 target_link_libraries(testNewKeyFrame ${OpenCV_LIBRARIES} ${PROJECT_NAME} )
+
+add_executable(testFlowTrackedFAST
+    test/flowLast.cc)
+target_link_libraries(testFlowTrackedFAST ${OpenCV_LIBRARIES} ${PROJECT_NAME} )

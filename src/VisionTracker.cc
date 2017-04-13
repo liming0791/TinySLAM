@@ -6,13 +6,25 @@
 void VisionTracker::TrackMonocular(ImageFrame& f)
 {
     if (state == NOTINITIALIZED) {
-        f.extractFAST();
-        f.extractPatch();
-        refFrame = new ImageFrame(f);
-        state = INITIALIZING;
+        SetInitializing(f);
     } else if (state == INITIALIZING) {
-        //TryInitialize(f);
-        TryInitializeByG2O(f);
+        TryInitialize(f);
+        //TryInitializeByG2O(f);
+    } else {
+        //f.opticalFlowFAST(*refFrame);
+        TrackFeatureOpticalFlow(f);
+        TrackPose3D2D(*refFrame, f);
+        //TrackByKeyFrame(*refFrame, f);
+    }
+}
+
+void VisionTracker::TrackMonocularNewKeyFrame(ImageFrame& f)
+{
+    if (state == NOTINITIALIZED) {
+        SetInitializing(f);
+    } else if (state == INITIALIZING) {
+        TryInitialize(f);
+        //TryInitializeByG2O(f);
     } else {
         //f.opticalFlowFAST(*refFrame);
         //TrackPose3D2D(*refFrame, f);
@@ -23,9 +35,7 @@ void VisionTracker::TrackMonocular(ImageFrame& f)
 void VisionTracker::TrackMonocularDirect(ImageFrame& f)
 {
     if (state == NOTINITIALIZED) {
-        f.extractFAST();
-        refFrame = &f;
-        state = INITIALIZING;
+        SetInitializing(f);
     } else if (state == INITIALIZING) {
         TryInitialize(f);
     } else {
@@ -33,89 +43,122 @@ void VisionTracker::TrackMonocularDirect(ImageFrame& f)
     }
 }
 
+void VisionTracker::SetInitializing(ImageFrame& f)
+{
+    f.extractFAST();
+    f.extractPatch();
+    static ImageFrame mFrame(f);
+    refFrame = &mFrame;
+    lastFrame = mFrame;
+    state = INITIALIZING;
+}
+
 void VisionTracker::TryInitialize(ImageFrame& f)
 {
 
     // Track FAST Points
-    f.opticalFlowFAST(*refFrame);
+    //int num_tracked = f.opticalFlowFAST(*refFrame);
+    // check trakced points ratio
+    //double ratio_tracked = 
+    //        num_tracked / (double)f.undisTrackedPoints.size();
 
-    // Track Pose 2D-2D
-    
-    std::vector< cv::Point2f > lp, rp;
-    lp.reserve(f.undisTrackedPoints.size());
-    rp.reserve(f.undisTrackedPoints.size());
+    double ratio_tracked = TrackFeatureOpticalFlow(f);
 
-    for (int i = 0, _end = (int)f.undisTrackedPoints.size(); 
-            i < _end; i++ ) {
-        if (f.undisTrackedPoints[i].x > 0) {
-            lp.push_back(refFrame->undisPoints[i]);
-            rp.push_back(f.undisTrackedPoints[i]);
-        }
-    }
-
-    double ratio_tracked = (double)lp.size() / 
-            (double)f.undisTrackedPoints.size();
-    if (ratio_tracked < 0.3) {
+    if (ratio_tracked < 0.5) {
         printf("Initialize Tracked points num too small!"
                 " less than 0.3\n");
         return;
     }
 
+    // Track Pose 2D-2D
+    // prepare tracked points
+    std::vector< cv::Point2f > lp, rp;
+    std::vector< int > pt_idx;
+    lp.reserve(f.undisTrackedPoints.size());
+    rp.reserve(f.undisTrackedPoints.size());
+    pt_idx.reserve(f.undisTrackedPoints.size());
+    for (int i = 0, _end = (int)f.undisTrackedPoints.size(); 
+            i < _end; i++ ) {
+        if (f.undisTrackedPoints[i].x > 0) {
+            lp.push_back(refFrame->undisPoints[i]);
+            rp.push_back(f.undisTrackedPoints[i]);
+            pt_idx.push_back(i);
+        }
+    }
+
+    // check disparty
     double disparty = 0;
     for (int i = 0, _end = (int)lp.size(); i < _end; i++) {
         disparty = disparty + (lp[i].x - rp[i].x)*(lp[i].x - rp[i].x)
                 + (lp[i].y - rp[i].y)*(lp[i].y - rp[i].y);
     }
-
-    if ( disparty < 900.0 * (int)lp.size() ) {
-        printf("Initialize disparty too small, less than 30 average!\n");
+    disparty = sqrt(disparty/(double)lp.size()) ;
+    if ( disparty < K->width/32.0 ) {
+        printf("Initialize disparty too small, less than %f average!\n", K->width/32.0);
         return;
     }
 
-    cv::Point2d principal_point(K->cx, K->cy);
-    double focal_length = (K->fx + K->fy)/2;
+    // find essentialmat
     cv::Mat inliers;
-    cv::Mat essential_matrix = cv::findEssentialMat(lp, rp, 
-            focal_length, principal_point, cv::RANSAC, 0.999, 1.0, inliers);
-
+    cv::Mat essential_matrix = cv::findEssentialMat(
+            lp, rp, 
+            (K->fx + K->fy)/2, cv::Point2d(K->cx, K->cy), 
+            cv::RANSAC, 0.999999, 3.0, inliers);
     int num_inliers = 0;
     for (int i = 0, _end = (int)lp.size(); i < _end; i++) {
-        if (inliers.at<unsigned char>(i) == 1)
+        if (inliers.at<unsigned char>(i) == 1) {
             ++num_inliers;
+        } else {
+            int idx = pt_idx[i];
+            f.trackedPoints[idx].x = f.trackedPoints[idx].y = 0;
+            f.undisTrackedPoints[idx].x = f.undisTrackedPoints[idx].y = 0;
+        }
     }
-
     double ratio_inliers = (double)num_inliers / (int)lp.size();
-
     if (ratio_inliers < 0.9) {
        printf("Initialize essential matrix inliers num too small!"
                " less than 0.9\n"); 
        return;
     }
-
     cout << "essential_matrix: " << endl
         << essential_matrix << endl;
 
+    // recovery pose
     cv::Mat R, t;
-    cv::recoverPose(essential_matrix, lp, rp, R, t, focal_length, principal_point);
-
-    double ratio_shift = t.at<double>(0)*t.at<double>(0)
-            + t.at<double>(1)*t.at<double>(1)
-            + t.at<double>(2)*t.at<double>(2);
-
-    if (ratio_shift < 0.0025) {
-        printf("Initialize recover pose shift too small!"
-                " Is %f\n", ratio_shift);
-        return ;
+    cv::recoverPose(essential_matrix, lp, rp, R, t, 
+            (K->fx + K->fy)/2, cv::Point2d(K->cx, K->cy), inliers);
+    int pose_num_inliers = 0;
+    for (int i = 0, _end = (int)lp.size(); i < _end; i++) {
+        if (inliers.at<unsigned char>(i) == 1) {
+            ++pose_num_inliers;
+        } else {
+            int idx = pt_idx[i];
+            f.trackedPoints[idx].x = f.trackedPoints[idx].y = 0;
+            f.undisTrackedPoints[idx].x = f.undisTrackedPoints[idx].y = 0;
+        }
+    }
+    double ratio_pose_inliers = (double)pose_num_inliers / (int)lp.size();
+    if (ratio_pose_inliers < 0.9) {
+        printf("Initialize recover pose inliers num %f too small!"
+                " less than 0.9\n", ratio_pose_inliers); 
+        return;
     }
 
+    // check chift
+    double shift = sqrt( t.at<double>(0)*t.at<double>(0) +
+            + t.at<double>(1)*t.at<double>(1) +
+            + t.at<double>(2)*t.at<double>(2) );
 
+    if (shift < 0.05) {
+        printf("Initialize recover pose shift too small, less than 0.05!"
+                " Is %f\n", shift);
+        return ;
+    }
 
     cout << "R: " << endl
         << R << endl;
     cout << "t: " << endl
         << t << endl;
-
-    printf("Shift: %f\n", ratio_shift);
 
     cv::Mat Rt = R.t();
     cv::Mat _t = -t;
@@ -126,27 +169,11 @@ void VisionTracker::TryInitialize(ImageFrame& f)
     f.R = mR.clone();
     f.t = mt.clone();
 
-    TooN::SO3<> Rot;
-    TooN::Vector<3> Trans;
-    Converter::Mat_TooNSO3(mR, Rot);
-    Trans[0] = mt.at<double>(0);
-    Trans[1] = mt.at<double>(1);
-    Trans[2] = mt.at<double>(2);
-    cout << "Rot: " << endl
-        << Rot <<endl;
-    cout << "Trans: " << endl
-        << Trans << endl;
-
-    mTcwNow = f.mTcw = refFrame->mTcw * TooN::SE3<>(Rot, Trans);
-    cout << "mTcw: " << endl
-        << f.mTcw << endl;
-
     // Init Mapping
     map->InitMap(*refFrame, f);
 
     // Set state
     state = INITIALIZED;
-
 }
 
 void VisionTracker::TryInitializeByG2O(ImageFrame& f)
@@ -364,8 +391,9 @@ void VisionTracker::reset()
 
 void VisionTracker::TrackByKeyFrame(ImageFrame& kf, ImageFrame& f)
 {
-    int numTracked = f.opticalFlowFAST(kf);
-    double ratio = (double)numTracked / (double)kf.points.size();
+    //int numTracked = f.opticalFlowFAST(kf);
+    //double ratio = (double)numTracked / (double)kf.points.size();
+    double ratio = TrackFeatureOpticalFlow(f);
 
     TrackPose3D2D(kf, f);
 
@@ -413,6 +441,9 @@ void VisionTracker::InsertKeyFrame(ImageFrame& kf, ImageFrame& f)
 
     // update refFrame
     refFrame = nkf;
+
+    // update lastFrame
+    lastFrame = *refFrame;
 
     // log keyframe size
     printf("There are %d keyframes\n", (int)map->keyFrames.size());
@@ -520,9 +551,9 @@ void VisionTracker::TrackPose2D2DG2O(ImageFrame& lf, ImageFrame& rf)
     for (int i = 0, _end = (int)lp.size(); i < _end; i++) {
         g2o::VertexSBAPointXYZ* v = new g2o::VertexSBAPointXYZ();
         v->setId(2+i);
-        double z = 1;
-        double x = ( lp[i].x - K->cx ) / K->fx;
-        double y = ( lp[i].y - K->cy ) / K->fy;
+        double z = 10;
+        double x = ( lp[i].x - K->cx ) / K->fx * z;
+        double y = ( lp[i].y - K->cy ) / K->fy * z;
         v->setMarginalized(true);
         v->setEstimate( Eigen::Vector3d(x, y, z) );
         optimizer.addVertex( v );
@@ -780,6 +811,9 @@ void VisionTracker::TriangulateNewPoints(ImageFrame& lf, ImageFrame& rf)
             }
         }
     }
+
+    if ( (int)pt_1.size() == 0 ) 
+        return;
 
     cv::triangulatePoints(T1, T2, pt_1, pt_2, pts_4d);
 
@@ -1150,6 +1184,52 @@ void VisionTracker::TrackPose3D2DHybrid(ImageFrame& lf, ImageFrame& rf)
                     Map_2d_3d_key_val(pt_idx[i - (int)pt_3d.size()], mpt));
         }
     }
+
+}
+
+double VisionTracker::TrackFeatureOpticalFlow(ImageFrame& f)
+{
+    // optical flow fast feature by lastframe
+    f.opticalFlowTrackedFAST(lastFrame);
+
+    // check essentialmat with refFrame
+    vector< int > pt_idx;
+    vector< cv::Point2f > pt_1, pt_2;
+    pt_idx.reserve(refFrame->points.size());
+    pt_1.reserve(refFrame->points.size());
+    pt_2.reserve(refFrame->points.size());
+
+    for (int i = 0, _end = (int)f.trackedPoints.size(); i < _end; i++) {
+        if (f.trackedPoints[i].x > 0) {
+            pt_1.push_back(refFrame->undisPoints[i]);
+            pt_2.push_back(f.undisTrackedPoints[i]);
+            pt_idx.push_back(i);
+        }
+    }
+
+    // essential matrix estimation validation
+    cv::Mat inlier;
+    TIME_BEGIN()
+    cv::findEssentialMat(pt_1, pt_2, 
+            (K->fx + K->fy)/2, cv::Point2d(K->cx, K->cy),
+            cv::RANSAC, 0.9999, 2, inlier);
+    TIME_END("essential matrix estimation")
+
+    int num_inliers = 0;
+    for (int i = 0, _end = (int)pt_1.size(); i < _end; i++) {
+        if (inlier.at< unsigned char >(i) == 0) {
+            int idx = pt_idx[i];
+            f.trackedPoints[idx].x = f.trackedPoints[idx].y = 0;
+            f.undisTrackedPoints[idx].x = f.undisTrackedPoints[idx].y = 0;
+        } else {
+            num_inliers++;
+        }
+    }
+
+    // upate last frame
+    lastFrame = f;
+
+    return (double)num_inliers / (double)refFrame->points.size();
 
 }
 

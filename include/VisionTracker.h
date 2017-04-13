@@ -177,12 +177,15 @@ class VisionTracker
         cv::Mat mR, mt;
 
         ImageFrame* refFrame;
+        ImageFrame lastFrame;
 
         VisionTracker() = default;
         VisionTracker(CameraIntrinsic* _K, Mapping* _map):
             state(NOTINITIALIZED), K(_K), map(_map) { };
 
+        void SetInitializing(ImageFrame& f);
         void TrackMonocular(ImageFrame& f);
+        void TrackMonocularNewKeyFrame(ImageFrame& f);
         void TrackMonocularDirect(ImageFrame& f);
         void TryInitialize(ImageFrame& f);
         void TryInitializeByG2O(ImageFrame& f);
@@ -196,6 +199,8 @@ class VisionTracker
         void TriangulateNewPoints(ImageFrame&lf, ImageFrame& rf );
         void TrackPose3D2DDirect(const ImageFrame& lf, ImageFrame& rf);
         void TrackPose3D2DHybrid(ImageFrame& lf, ImageFrame& rf );
+
+        double TrackFeatureOpticalFlow(ImageFrame& f);
 
         cv::Mat GetTwcMatNow();
         cv::Mat GetTcwMatNow();

@@ -17,6 +17,7 @@ using namespace std;
 int main(int argc, char** argv)
 {
 
+    // camera device 
     CameraIntrinsic K1(argv[1]);
     CameraDevice camera1(K1);
     printf("Camera1: %f %f %f %f %f %f %d %d\n", camera1.K.cx , camera1.K.cy ,camera1.K.fx ,camera1.K.fy ,
@@ -48,14 +49,18 @@ int main(int argc, char** argv)
     Viewer viewer(&map, &tracker);
     std::thread* ptViewer = new std::thread(&Viewer::run, &viewer);
 
-    ImageFrame *refImgFrame = NULL;
-    ImageFrame lastFrame;
-
-    bool isFirst = true;
+    bool started = false;
     char cmd = ' ';
     cv::namedWindow("result");
 
+    ImageFrame *refImgFrame = NULL;
+    ImageFrame lastFrame;
+    bool isFirst = true;
+
     while (true) {
+
+        TIME_BEGIN()
+
         if ( !camera1.getFrame(Frame, camera1.BGR) ) {
             printf("Get Frame failed!\n");
             break;
@@ -66,45 +71,43 @@ int main(int argc, char** argv)
             cmd = cv::waitKey(-1);
         }
 
-        // If is video , start at begining
-        //if (isVideo) {
-        //    cmd = 's';
-        //}
-
         if (cmd == 's') {
             if (isFirst) {              // fisrt 's'
                 refImgFrame = new ImageFrame(Frame, &K1); 
-                TIME_BEGIN()
                 refImgFrame->extractFAST();
-                refImgFrame->extractPatch();
                 lastFrame = *refImgFrame;
-                TIME_END("FAST")
+                map.ClearMap();
                 isFirst = false;
             } else {                                // second 's'
                 if ( refImgFrame != NULL ) {
-                    ImageFrame newImgFrame(Frame, &K1);
+
+                    ImageFrame newImgFrame;
+                    
+                    TIME_BEGIN()
+                    newImgFrame = ImageFrame(Frame, &K1);
+                    TIME_END("New Image Frame")
+
                     // optical flow result
                     newImgFrame.opticalFlowTrackedFAST(lastFrame);
                     lastFrame = newImgFrame;
-                    TIME_BEGIN()
-                    tracker.TrackPose2D2DG2O(*refImgFrame, newImgFrame);
-                    TIME_END("Init 2D2DG2O: ")
                     isFirst = true;
-                    for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); i < _end; i++) { // draw result
-                        if (newImgFrame.trackedPoints[i].x > 0) {
-                            cv::line(Frame, refImgFrame->points[i], 
-                                    newImgFrame.trackedPoints[i],
-                                    cv::Scalar(0, 255, 0));
-                        }
-                    }
                 }    
             }
         } else {                                
             if ( refImgFrame != NULL ) {
-                ImageFrame newImgFrame(Frame, &K1);
+                ImageFrame newImgFrame;
+                    
+                TIME_BEGIN()
+                newImgFrame = ImageFrame(Frame, &K1);
+                TIME_END("New Image Frame")
+
                 // optical flow result
+                TIME_BEGIN()
                 newImgFrame.opticalFlowTrackedFAST(lastFrame);
+                TIME_END("OpticalFlowTrackedFast")
+
                 lastFrame = newImgFrame;
+
                 for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); i < _end; i++) { // draw result
                     if (newImgFrame.trackedPoints[i].x > 0) {
                         cv::line(Frame, refImgFrame->points[i], 
@@ -115,13 +118,11 @@ int main(int argc, char** argv)
             }    
         }
 
+        TIME_END("One Frame")
+
         cv::imshow("result",Frame);
         cmd = cv::waitKey(33);
     }
-
-    cv::waitKey();
-
-    viewer.requestFinish();
 
     return 0;
 }

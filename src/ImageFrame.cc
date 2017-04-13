@@ -79,8 +79,10 @@ vector< int > ImageFrame::fuseFAST()
         if (trackedPoints[i].x > 0) {
             bool findRef = false;
             for (int j = 0, _end = (int)points.size(); j < _end; j++) {
-                double dis = (trackedPoints[i].x - points[j].x)*(trackedPoints[i].x - points[j].x) +
-                        (trackedPoints[i].y - points[j].y)*(trackedPoints[i].y - points[j].y);
+                double dis = (trackedPoints[i].x - points[j].x)*
+                        (trackedPoints[i].x - points[j].x) +
+                        (trackedPoints[i].y - points[j].y)*
+                        (trackedPoints[i].y - points[j].y);
                 if (dis < 4) {
                     ref[j] = i;
                     findRef = true;
@@ -90,11 +92,15 @@ vector< int > ImageFrame::fuseFAST()
             
             if (!findRef) {
                 points.push_back(trackedPoints[i]);
-                undisPoints.push_back(K->undistort(trackedPoints[i].x, trackedPoints[i].y));
+                undisPoints.push_back(
+                        K->undistort(trackedPoints[i].x, trackedPoints[i].y));
                 ref.push_back(i);
             }
         }
     }
+
+    trackedPoints = points;
+    undisTrackedPoints = undisPoints;
 
     return ref;
 }
@@ -231,22 +237,6 @@ void ImageFrame::trackPatchFAST(ImageFrame& refFrame)
     }
 
     cout << " track patch FAST done." << endl;
-
-    // homography estimation
-    //cv::Mat inliner;
-    //TIME_BEGIN()
-    //    cv::findHomography(refFrame.undisPoints, undisTrackedPoints, 
-    //        cv::RANSAC, 3, inliner);
-    //TIME_END("Homography estimation: ")
-
-    //for (int i = 0, _end = (int)trackedPoints.size(); i < _end; i++) {
-    //    if (inliner.at<unsigned char>(i) == 1) {
-
-    //    } else {
-    //        trackedPoints[i].x = trackedPoints[i].y = 0;
-    //        undisTrackedPoints[i].x = undisTrackedPoints[i].y = 0;
-    //    }
-    //}
 }
 
 int ImageFrame::opticalFlowFAST(ImageFrame& refFrame)
@@ -254,14 +244,14 @@ int ImageFrame::opticalFlowFAST(ImageFrame& refFrame)
     // set reference frame
     mRefFrame = &refFrame;
 
-    // optical flow
+    // optical flow points
     cv::Mat status, err;
     TIME_BEGIN()
     cv::calcOpticalFlowPyrLK(refFrame.image, image, 
             refFrame.points, trackedPoints, status, err) ;
     TIME_END("Optical Flow")
-    cout << "status mat type: " << Converter::getImageType(status.type()) << endl;
 
+    // undistort trackedPoints
     undisTrackedPoints.reserve(trackedPoints.size());
     undisTrackedPoints.resize(0);
     for (int i = 0, _end = (int)trackedPoints.size(); i < _end; i++) {
@@ -269,19 +259,24 @@ int ImageFrame::opticalFlowFAST(ImageFrame& refFrame)
                 K->undistort(trackedPoints[i].x, trackedPoints[i].y) );
     }
 
+    // prepare points
     vector< cv::Point2f > e_pt1, e_pt2;
     vector< int > e_idx;
     e_pt1.reserve(undisTrackedPoints.size());
     e_pt2.reserve(undisTrackedPoints.size());
     e_idx.reserve(undisTrackedPoints.size());
 
-    // estimation validation by patch
+    // estimation validation by **Patch** and **disparty**
     TIME_BEGIN()
     cv::Mat desc = extractTrackedPatch();
     for (int i = 0, _end = (int)undisTrackedPoints.size(); i < _end; i++) {
-        double dist = norm(refFrame.descriptors.row(i),
+        double dist = cv::norm(
+                refFrame.descriptors.row(i),
                 desc.row(i), cv::NORM_L2);
+        //double disparty = cv::norm(
+        //        refFrame.points[i] - trackedPoints[i]);
         //cout << "Patch dist : " << dist << endl;
+        //cout << "Disparty: " << disparty << endl;
         if (dist <= 50 && status.at<unsigned char>(i) == 1) {
             e_pt1.push_back(refFrame.undisPoints[i]);
             e_pt2.push_back(undisTrackedPoints[i]);
@@ -291,23 +286,16 @@ int ImageFrame::opticalFlowFAST(ImageFrame& refFrame)
             undisTrackedPoints[i].x = undisTrackedPoints[i].y = 0;
         }
     }
-    TIME_END("path estimation validation")
+    TIME_END("patch estimation validation")
 
-    // homography estimation validation 
+    // inlier estimation
     cv::Mat inlier;
-    //TIME_BEGIN()
-    //cv::findHomography(e_pt1, e_pt2, 
-    //        cv::RANSAC, 2, inlier);
-    //TIME_END("Homography estimation")
-
     // essential matrix estimation validation
     TIME_BEGIN()
     cv::findEssentialMat(e_pt1, e_pt2, 
             (K->fx + K->fy)/2, cv::Point2d(K->cx, K->cy),
-            cv::RANSAC, 0.999, 1, inlier);
+            cv::RANSAC, 0.9999, 2, inlier);
     TIME_END("essential matrix estimation")
-    cout << "Inlier mat type: " << Converter::getImageType(inlier.type()) << endl;
-
 
     int num_tracked = 0;
     for (int i = 0, _end = (int)e_idx.size(); i < _end; i++) {
@@ -354,20 +342,22 @@ void ImageFrame::opticalFlowTrackedFAST(ImageFrame& lastFrame)
                 K->undistort(flow_pts[i].x, flow_pts[i].y) );
     }
 
-    cv::Mat inliner;
+    // essential matrix estimation validation
+    cv::Mat inlier;
     TIME_BEGIN()
-    cv::findHomography(undis_pts, undis_flow_pts, 
-            cv::RANSAC, 3, inliner);
-    TIME_END("Homography estimation")
+    cv::findEssentialMat(undis_pts, undis_flow_pts, 
+            (K->fx + K->fy)/2, cv::Point2d(K->cx, K->cy),
+            cv::RANSAC, 0.9999, 2, inlier);
+    TIME_END("essential matrix estimation")
 
     trackedPoints.resize(lastFrame.trackedPoints.size());
     undisTrackedPoints.resize(lastFrame.trackedPoints.size());
     fill(trackedPoints.begin(), 
-            trackedPoints.end(), cv::Point2f(-1,-1));
+            trackedPoints.end(), cv::Point2f(0,0));
     fill(undisTrackedPoints.begin(), 
-            undisTrackedPoints.end(), cv::Point2f(-1,-1));
+            undisTrackedPoints.end(), cv::Point2f(0,0));
     for (int i = 0, _end = (int)undis_flow_pts.size(); i < _end; i++) {
-        if (inliner.at<unsigned char>(i) == 1) {
+        if (inlier.at<unsigned char>(i) == 1) {
           trackedPoints[idxs[i]] = flow_pts[i];
           undisTrackedPoints[idxs[i]] = undis_flow_pts[i];
         } else {

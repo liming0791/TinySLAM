@@ -28,16 +28,13 @@ void Mapping::InitMap(ImageFrame& lf, ImageFrame& rf)
     cv::triangulatePoints(T1, T2, pts_1, pts_2, pts_4d);
 
     cout << "Triangulate map point:" << endl;
-
     for (int i = 0; i < pts_4d.cols; i++) {
         float w = pts_4d.at<float>(3, i);
         cv::Point3f* mpt = new cv::Point3f(
                 pts_4d.at<float>(0, i)/w,
                 pts_4d.at<float>(1, i)/w,
                 pts_4d.at<float>(2, i)/w);
-
         cout << *mpt << endl;
-
         mapPoints.insert(mpt);     // Insert map point pointer to std::set
         lf.map_2d_3d.insert(  // Insert bimap key-val to boost::bimap in lf
                 Map_2d_3d_key_val(pt_idx[i], mpt));     
@@ -52,13 +49,19 @@ void Mapping::InitMap(ImageFrame& lf, ImageFrame& rf)
 
 void Mapping::ClearMap()
 {
+    // delete points
     for (set< cv::Point3f* >::iterator iter = mapPoints.begin(),
             i_end = mapPoints.end(); iter != i_end; iter++) {
         cv::Point3f * p = *iter;
         if (p != NULL)
             delete(p);
     }
-    
     mapPoints.clear();
+
+    // delete keyframes
+    for (int i = 0, _end = (int)keyFrames.size(); i < _end; i++) {
+        if (keyFrames[i] != NULL) 
+            delete(keyFrames[i]);
+    }
     keyFrames.resize(0);
 }
