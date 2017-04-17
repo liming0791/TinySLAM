@@ -144,7 +144,7 @@ void VisionTracker::TryInitialize(ImageFrame& f)
         return;
     }
 
-    // check chift
+    // check shift
     double shift = sqrt( t.at<double>(0)*t.at<double>(0) +
             + t.at<double>(1)*t.at<double>(1) +
             + t.at<double>(2)*t.at<double>(2) );
@@ -160,14 +160,14 @@ void VisionTracker::TryInitialize(ImageFrame& f)
     cout << "t: " << endl
         << t << endl;
 
-    cv::Mat Rt = R.t();
-    cv::Mat _t = -t;
+    //cv::Mat Rt = R.t();
+    //cv::Mat _t = -Rt*t;
 
-    mR = Rt.clone();
-    mt = _t.clone();
+    mR = R.clone();
+    mt = t.clone();
 
-    f.R = mR.clone();
-    f.t = mt.clone();
+    f.R = R.clone();
+    f.t = t.clone();
 
     // Init Mapping
     map->InitMap(*refFrame, f);
@@ -341,7 +341,7 @@ void VisionTracker::TryInitializeByG2O(ImageFrame& f)
     cv::Mat t = res.rowRange(0,3).col(3);
 
     cv::Mat Rt = R.t();
-    cv::Mat _t = -t;
+    cv::Mat _t = -Rt*t;
 
     mR = Rt.clone();
     mt = _t.clone();
@@ -395,9 +395,11 @@ void VisionTracker::TrackByKeyFrame(ImageFrame& kf, ImageFrame& f)
     //double ratio = (double)numTracked / (double)kf.points.size();
     double ratio = TrackFeatureOpticalFlow(f);
 
+    printf("TrackFeature OpticalFlow ratio: %f\n", ratio);
+
     TrackPose3D2D(kf, f);
 
-    double dist = cv::norm(kf.R.t()*f.t - kf.t, cv::NORM_L2);
+    double dist = cv::norm(-f.R*kf.R.t()*kf.t + f.t, cv::NORM_L2);
     cout << "Frame dist to keyframe: " << dist << endl;
 
     if (ratio >= 0.6) {
@@ -425,14 +427,17 @@ void VisionTracker::InsertKeyFrame(ImageFrame& kf, ImageFrame& f)
     f.extractPatch();
 
     // set map points
+    int num_mappoints = 0;
     for (int i = 0, _end = (int)ref.size(); i < _end; i++) {
         if (ref[i] > 0) {
             Map_2d_3d::left_const_iterator iter = kf.map_2d_3d.left.find(ref[i]);
             if (iter != kf.map_2d_3d.left.end()) {
                 f.map_2d_3d.insert(Map_2d_3d_key_val(i, iter->second));
+                num_mappoints++;
             }
         }
     }
+    printf("set map points num: %d \n", num_mappoints);
 
     // keyFrame 
     f.isKeyFrame = true;
@@ -480,7 +485,7 @@ void VisionTracker::TrackPose2D2D(const ImageFrame& lf, ImageFrame& rf)
         << t << endl;
 
     cv::Mat Rt = R.t();
-    cv::Mat _t = -t;
+    cv::Mat _t = -Rt*t;
 
     mR = Rt.clone();
     mt = _t.clone();
@@ -618,7 +623,7 @@ void VisionTracker::TrackPose2D2DG2O(ImageFrame& lf, ImageFrame& rf)
     cv::Mat t = res.rowRange(0,3).col(3);
 
     cv::Mat Rt = R.t();
-    cv::Mat _t = -t;
+    cv::Mat _t = -Rt*t;
 
     mR = Rt.clone();
     mt = _t.clone();
@@ -679,9 +684,9 @@ void VisionTracker::TrackPose3D2D(const ImageFrame& lf, ImageFrame& rf)
             pts_2d.push_back(rf.undisTrackedPoints[iter->left]);    
             cv::Point3f* pp = iter->right;
             pts_3d.push_back(cv::Point3f(        // convert points from world to lf
-                        R_data[0]*pp->x + R_data[3]*pp->y + R_data[6]*pp->z - t_data[0],
-                        R_data[1]*pp->x + R_data[4]*pp->y + R_data[7]*pp->z - t_data[1],
-                        R_data[2]*pp->x + R_data[5]*pp->y + R_data[8]*pp->z - t_data[2]
+                        R_data[0]*pp->x + R_data[1]*pp->y + R_data[2]*pp->z + t_data[0],
+                        R_data[3]*pp->x + R_data[4]*pp->y + R_data[5]*pp->z + t_data[1],
+                        R_data[6]*pp->x + R_data[7]*pp->y + R_data[8]*pp->z + t_data[2]
                         ));
         }
     }
@@ -695,8 +700,8 @@ void VisionTracker::TrackPose3D2D(const ImageFrame& lf, ImageFrame& rf)
     //cv::solvePnPRansac (pts_3d, pts_2d, KMat, cv::Mat(), r, t, false, 100, 8.0, 0.99, inliers);   // opencv solvePnP result is bad, 
     //cv::Rodrigues(r, R);                                                                          // do not use it
 
-    cv::Mat R,t;                                       // set initial pose as the refImage
-    bundleAdjustment3D2D(pts_3d, pts_2d, KMat, R, t);           // optimize the pose by g2o
+    cv::Mat R,t;                            // set initial pose as the refImage
+    bundleAdjustment3D2D(pts_3d, pts_2d, KMat, R, t);    // optimize the pose by g2o
 
     //cout << "BA:" << endl;
     //cout << R << endl;
@@ -715,8 +720,11 @@ void VisionTracker::TrackPose3D2D(const ImageFrame& lf, ImageFrame& rf)
     //so3 = TooN::SO3<>::exp(w);
     //Converter::TooNSO3_Mat(so3, R);
 
-    mR = lf.R * R.t();
-    mt = lf.R * (-t) + lf.t;
+    //cv::Mat Rt = R.t();
+    //cv::Mat _t = -Rt*t;
+
+    mR = R*lf.R;
+    mt = R*lf.t + t;
 
     rf.R = mR.clone();
     rf.t = mt.clone();
@@ -797,8 +805,8 @@ void VisionTracker::TriangulateNewPoints(ImageFrame& lf, ImageFrame& rf)
 {
 
     cv::Mat T1, T2, pts_4d;
-    cv::hconcat(lf.R.t(), -lf.t, T1);
-    cv::hconcat(rf.R.t(), -rf.t, T2);
+    cv::hconcat(lf.R, lf.t, T1);
+    cv::hconcat(rf.R, rf.t, T2);
 
     vector< cv::Point2f > pt_1, pt_2;
     vector< int > pt_idx;
@@ -816,8 +824,10 @@ void VisionTracker::TriangulateNewPoints(ImageFrame& lf, ImageFrame& rf)
         }
     }
 
-    if ( (int)pt_1.size() == 0 ) 
+    if ( (int)pt_1.size() == 0 ) {
+        printf("No new points to triangulate!\n");
         return;
+    } 
 
     cv::triangulatePoints(T1, T2, pt_1, pt_2, pts_4d);
 
@@ -923,7 +933,7 @@ void VisionTracker::TrackPose3D2DDirect(const ImageFrame& lf, ImageFrame& rf)
     Converter::TooNSO3_Mat(so3, R);
 
     cv::Mat Rt = R.t();
-    cv::Mat _t = -t;
+    cv::Mat _t = -Rt*t;
 
     mR = Rt.clone();
     mt = _t.clone();
@@ -1145,8 +1155,10 @@ void VisionTracker::TrackPose3D2DHybrid(ImageFrame& lf, ImageFrame& rf)
     cv::Mat R = res.rowRange(0,3).colRange(0,3);
     cv::Mat t = res.rowRange(0,3).col(3);
     // pose composation
-    mR = lf.R * R.t();
-    mt = lf.R * (-t) + lf.t;
+    cv::Mat Rt = R.t();
+    cv::Mat _t = -Rt*t;
+    mR = lf.R * Rt;
+    mt = lf.R * _t + lf.t;
     rf.R = mR.clone();
     rf.t = mt.clone();
 
@@ -1247,7 +1259,7 @@ void VisionTracker::poseEstimationDirect(
     
 }
 
-cv::Mat VisionTracker::GetTcwMatNow()
+cv::Mat VisionTracker::GetTwcMatNow()
 {
 
     if (mR.empty()||mt.empty())
@@ -1259,7 +1271,7 @@ cv::Mat VisionTracker::GetTcwMatNow()
     return res;
 }
 
-cv::Mat VisionTracker::GetTwcMatNow()
+cv::Mat VisionTracker::GetTcwMatNow()
 {
 
     if (mR.empty()||mt.empty())
@@ -1267,7 +1279,7 @@ cv::Mat VisionTracker::GetTwcMatNow()
 
     cv::Mat res = cv::Mat::eye(4, 4, CV_64FC1);
     cv::Mat Rt = mR.t();
-    cv::Mat _t = -mt;
+    cv::Mat _t = -Rt*mt;
     Rt.copyTo(res.rowRange(0,3).colRange(0,3));
     _t.copyTo(res.rowRange(0,3).col(3));
     return res;

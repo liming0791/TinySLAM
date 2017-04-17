@@ -87,15 +87,20 @@ int main(int argc, char** argv)
                 printf("Draw KeyFrame...\n");
 
                 for (int i = 0, _end = (int)newImgFrame.points.size(); i < _end; i++) {
-                    cv::circle(Frame, newImgFrame.points[i], 2, cv::Scalar(0,0,255));
+                    //cv::circle(Frame, newImgFrame.points[i], 2, cv::Scalar(255,0,0));
                     if (newImgFrame.ref[i] > 0) {
                         // draw fuse ref
-                        cv::line(Frame, newImgFrame.points[i], newImgFrame.trackedPoints[newImgFrame.ref[i]], cv::Scalar(255,0,0));
+                        cv::line(Frame, newImgFrame.points[i], 
+                                newImgFrame.trackedPoints[newImgFrame.ref[i]], 
+                                cv::Scalar(0,0,255));
                         // draw match fast
-                        cv::line(Frame, newImgFrame.points[i], newImgFrame.mRefFrame->points[newImgFrame.ref[i]], cv::Scalar(0,255,0));
+                        //cv::line(Frame, newImgFrame.points[i], 
+                        //        newImgFrame.mRefFrame->points[newImgFrame.ref[i]], 
+                        //        cv::Scalar(0,255,0));
                     }
                 }
-
+                cv::imshow("result",Frame);
+                cmd = cv::waitKey(-1);
             } else {
                 
                 printf("Draw internal Frame...\n");

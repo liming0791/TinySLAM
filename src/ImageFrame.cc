@@ -75,6 +75,7 @@ vector< int > ImageFrame::fuseFAST()
 
     ref = vector< int > (points.size(), -1);
 
+    int num_fuse = 0;
     for (int i = 0, _end = (int)trackedPoints.size(); i < _end; i++) {
         if (trackedPoints[i].x > 0) {
             bool findRef = false;
@@ -86,18 +87,22 @@ vector< int > ImageFrame::fuseFAST()
                 if (dis < 4) {
                     ref[j] = i;
                     findRef = true;
+                    num_fuse++;
                     break;
                 }
             }
             
-            if (!findRef) {
-                points.push_back(trackedPoints[i]);
-                undisPoints.push_back(
-                        K->undistort(trackedPoints[i].x, trackedPoints[i].y));
-                ref.push_back(i);
-            }
+            //if (!findRef) {
+            //    points.push_back(trackedPoints[i]);
+            //    undisPoints.push_back(
+            //            K->undistort(trackedPoints[i].x, trackedPoints[i].y));
+            //    ref.push_back(i);
+            //}
         }
     }
+
+    printf("Fuse FAST num: %d,  ratio: %f\n", num_fuse, 
+            (double)num_fuse / (double)points.size());
 
     //trackedPoints = points;
     //undisTrackedPoints = undisPoints;
@@ -397,7 +402,7 @@ void ImageFrame::SBITrackFAST(ImageFrame& refFrame)
 
 }
 
-cv::Mat ImageFrame::GetTcwMat()
+cv::Mat ImageFrame::GetTwcMat()
 {
     if (R.empty() || t.empty())
         return cv::Mat();
@@ -408,14 +413,14 @@ cv::Mat ImageFrame::GetTcwMat()
     return res;
 }
 
-cv::Mat ImageFrame::GetTwcMat()
+cv::Mat ImageFrame::GetTcwMat()
 {
     if (R.empty() || t.empty() )
         return cv::Mat();
 
     cv::Mat res = cv::Mat::eye(4, 4, CV_64FC1);
     cv::Mat Rt = R.t();
-    cv::Mat _t = -t;
+    cv::Mat _t = -Rt*t;
     Rt.copyTo(res.rowRange(0,3).colRange(0,3));
     _t.copyTo(res.rowRange(0,3).col(3));
     return res;

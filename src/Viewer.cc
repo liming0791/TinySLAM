@@ -134,22 +134,22 @@ void Viewer::drawKeyFrames()
     const float h = w*0.75;
     const float z = w*0.6;
 
-    static int count = 0;
+    //static int count = 0;
 
-    count++;
-    if (count == 100) {
-        printf("Viewer: Draw %d keyframes\n", (int)map->keyFrames.size());
-        count=0;
-    }
+    //count++;
+    //if (count == 100) {
+    //    printf("Viewer: Draw %d keyframes\n", (int)map->keyFrames.size());
+    //    count=0;
+    //}
     
     for (int i = 0, _end = (int)map->keyFrames.size(); i < _end; i++) {
         ImageFrame* pKF = map->keyFrames[i];
         cv::Mat Tcw = pKF->GetTcwMat().t();
 
-        if (count == 0) {
-            cout << "Viewer: Draw keyframe " << i << " :" << endl;
-            cout << Tcw << endl;
-        }
+        //if (count == 0) {
+        //    cout << "Viewer: Draw keyframe " << i << " :" << endl;
+        //    cout << Tcw << endl;
+        //}
 
         glPushMatrix();
 

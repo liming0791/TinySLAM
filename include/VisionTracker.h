@@ -217,6 +217,8 @@ class VisionTracker
                 cv::Mat* gray, 
                 Eigen::Matrix3f& K, 
                 Eigen::Isometry3d& Tcw );
+
+//        Initializer initializer;
 };
 
 #endif

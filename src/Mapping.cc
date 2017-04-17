@@ -4,8 +4,8 @@ void Mapping::InitMap(ImageFrame& lf, ImageFrame& rf)
 {
 
     cv::Mat T1, T2, pts_4d;
-    cv::hconcat(lf.R.t(), -lf.t, T1);
-    cv::hconcat(rf.R.t(), -rf.t, T2);
+    cv::hconcat(lf.R, lf.t, T1);
+    cv::hconcat(rf.R, rf.t, T2);
 
     std::vector< cv::Point2f > pts_1, pts_2;
     std::vector< int > pt_idx;
