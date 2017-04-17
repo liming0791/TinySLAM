@@ -254,10 +254,10 @@ int ImageFrame::opticalFlowFAST(ImageFrame& refFrame)
 
     // optical flow points
     cv::Mat status, err;
-    TIME_BEGIN()
+    //TIME_BEGIN()
     cv::calcOpticalFlowPyrLK(refFrame.image, image, 
             refFrame.points, trackedPoints, status, err) ;
-    TIME_END("Optical Flow")
+    //TIME_END("Optical Flow")
 
     // undistort trackedPoints
     undisTrackedPoints.reserve(trackedPoints.size());
@@ -275,7 +275,7 @@ int ImageFrame::opticalFlowFAST(ImageFrame& refFrame)
     e_idx.reserve(undisTrackedPoints.size());
 
     // estimation validation by **Patch** and **disparty**
-    TIME_BEGIN()
+    //TIME_BEGIN()
     cv::Mat desc = extractTrackedPatch();
     for (int i = 0, _end = (int)undisTrackedPoints.size(); i < _end; i++) {
         double dist = cv::norm(
@@ -294,16 +294,16 @@ int ImageFrame::opticalFlowFAST(ImageFrame& refFrame)
             undisTrackedPoints[i].x = undisTrackedPoints[i].y = 0;
         }
     }
-    TIME_END("patch estimation validation")
+    //TIME_END("patch estimation validation")
 
     // inlier estimation
     cv::Mat inlier;
     // essential matrix estimation validation
-    TIME_BEGIN()
+    //TIME_BEGIN()
     cv::findEssentialMat(e_pt1, e_pt2, 
             (K->fx + K->fy)/2, cv::Point2d(K->cx, K->cy),
             cv::RANSAC, 0.9999, 1, inlier);
-    TIME_END("essential matrix estimation")
+    //TIME_END("essential matrix estimation")
 
     int num_tracked = 0;
     for (int i = 0, _end = (int)e_idx.size(); i < _end; i++) {
@@ -340,10 +340,10 @@ void ImageFrame::opticalFlowTrackedFAST(ImageFrame& lastFrame)
     }
 
     cv::Mat status, err;
-    TIME_BEGIN()
-        cv::calcOpticalFlowPyrLK(lastFrame.image, image, 
-                pts, flow_pts, status, err) ;
-    TIME_END("Optical Flow")
+    //TIME_BEGIN()
+    cv::calcOpticalFlowPyrLK(lastFrame.image, image, 
+            pts, flow_pts, status, err) ;
+    //TIME_END("Optical Flow")
 
     for (int i = 0, _end = (int)flow_pts.size(); i < _end; i++) {
         undis_flow_pts.push_back( 

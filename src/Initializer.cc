@@ -36,11 +36,11 @@ bool Initializer::TrackFeatureAndCheck(ImageFrame *f)
     }
     // essential matrix estimation validation
     cv::Mat inlier;
-    TIME_BEGIN()
+    //TIME_BEGIN()
     cv::findEssentialMat(pt_1, pt_2, 
             (f->K->fx + f->K->fy)/2, cv::Point2d(f->K->cx, f->K->cy),
-            cv::RANSAC, 0.9999, 2, inlier);
-    TIME_END("TryInitialize: essential matrix estimation")
+            cv::RANSAC, 0.999, 1, inlier);
+    //TIME_END("TryInitialize: essential matrix estimation")
     int num_inliers = 0;
     for (int i = 0, _end = (int)pt_1.size(); i < _end; i++) {
         if (inlier.at< unsigned char >(i) == 0) {
@@ -295,7 +295,7 @@ bool Initializer::RobustTrackPose2D2DG2O(ImageFrame &lf, ImageFrame &rf)
     optimizer.setAlgorithm( algorithm );
     optimizer.setVerbose( false );
 
-    cout << "add pose vertices." << endl;
+    //cout << "add pose vertices." << endl;
     // add pose vertices
     g2o::VertexSE3Expmap* v1 = new g2o::VertexSE3Expmap();
     v1->setId(0);
@@ -308,7 +308,7 @@ bool Initializer::RobustTrackPose2D2DG2O(ImageFrame &lf, ImageFrame &rf)
     v2->setEstimate(g2o::SE3Quat());
     optimizer.addVertex(v2);
 
-    cout << "add 3d points vertices" << endl;
+    //cout << "add 3d points vertices" << endl;
     // add 3d point vertices
     for (int i = 0, _end = (int)lp.size(); i < _end; i++) {
         g2o::VertexSBAPointXYZ* v = new g2o::VertexSBAPointXYZ();
@@ -321,7 +321,7 @@ bool Initializer::RobustTrackPose2D2DG2O(ImageFrame &lf, ImageFrame &rf)
         optimizer.addVertex( v );
     }
 
-    cout << "add camera parameters" << endl;
+    //cout << "add camera parameters" << endl;
     // prepare camera parameters
     g2o::CameraParameters* camera = 
         new g2o::CameraParameters( 
@@ -331,7 +331,7 @@ bool Initializer::RobustTrackPose2D2DG2O(ImageFrame &lf, ImageFrame &rf)
     camera->setId(0);
     optimizer.addParameter(camera);
 
-    cout << "add edges" << endl;
+    //cout << "add edges" << endl;
     // prepare edges
     vector< g2o::EdgeProjectXYZ2UV* > edges;
     for (int i = 0, _end = (int)lp.size(); i < _end; i++) {
@@ -364,9 +364,9 @@ bool Initializer::RobustTrackPose2D2DG2O(ImageFrame &lf, ImageFrame &rf)
         edges.push_back( edge );
     }
 
-    cout << "optimization" << endl;
+    //cout << "optimization" << endl;
     // optimization
-    optimizer.setVerbose(true);
+    //optimizer.setVerbose(true);
     optimizer.initializeOptimization();
     optimizer.optimize(100);
 
@@ -378,14 +378,14 @@ bool Initializer::RobustTrackPose2D2DG2O(ImageFrame &lf, ImageFrame &rf)
         e->computeError();
         if (e->chi2() > 1) {
             inliers[i%num_vert] = 0;
-            cout << "error = " << e->chi2() << endl;
+            //cout << "error = " << e->chi2() << endl;
         } 
     }
     int num_inliers = 0;
     for ( int i = 0, _end = (int)inliers.size(); i < _end; i++) {
         num_inliers += inliers[i];
     }
-    cout << "num inliers: " << num_inliers << endl;
+    //cout << "num inliers: " << num_inliers << endl;
     // check inliers
     double ratio_inlier = (double)num_inliers / (double)lp.size();
     if (ratio_inlier < 0.8) {
@@ -419,9 +419,9 @@ bool Initializer::RobustTrackPose2D2DG2O(ImageFrame &lf, ImageFrame &rf)
 
     // check points 
     bool checkPassed = false;
-    TIME_BEGIN()
+    //TIME_BEGIN()
     checkPassed = CheckPoints(R,t, pts_4d);
-    TIME_END("check points")
+    //TIME_END("check points")
 
     if( !checkPassed ) {
         return false;
@@ -449,10 +449,10 @@ bool Initializer::RobustTrackPose2D2DG2O(ImageFrame &lf, ImageFrame &rf)
     map->keyFrames.push_back(nkf);
     resFirstFrame = nkf;
 
-    cout << "R: " << endl
-        << R << endl;
-    cout << "t: " << endl
-        << t << endl;
+    //cout << "R: " << endl
+    //    << R << endl;
+    //cout << "t: " << endl
+    //    << t << endl;
 
     rf.R = R.clone();
     rf.t = t.clone();
@@ -462,13 +462,13 @@ bool Initializer::RobustTrackPose2D2DG2O(ImageFrame &lf, ImageFrame &rf)
 
 bool Initializer::CheckPoints(cv::Mat &R, cv::Mat &t, cv::Mat &pts)
 {
-    cout << endl << "CheckPoints:" << endl;
+    //cout << endl << "CheckPoints:" << endl;
 
-    cout << "R:" << endl;
-    cout << R << endl;
+    //cout << "R:" << endl;
+    //cout << R << endl;
 
-    cout << "t:" << endl;
-    cout << t << endl;
+    //cout << "t:" << endl;
+    //cout << t << endl;
 
     int inliers = 0;
     // check parallax
@@ -496,6 +496,7 @@ bool Initializer::CheckPoints(cv::Mat &R, cv::Mat &t, cv::Mat &pts)
         double cosAngle = pts_3d.dot(O2P) / (cv::norm(pts_3d) * cv::norm(O2P));
 
         if (cosAngle > 0.999) {
+            pts.at<float>(3, i) = 0;   // mark as outlier
             //printf("Point disparty too smalll , cosAngle: %f\n", cosAngle);
         } else {
             //printf("Point disparty , cosAngle: %f\n", cosAngle);
@@ -509,7 +510,7 @@ bool Initializer::CheckPoints(cv::Mat &R, cv::Mat &t, cv::Mat &pts)
         return false;
     }
 
-    printf("Triangulation inliers num: %d ratio: %f\n", inliers, ratio);
+    //printf("Triangulation inliers num: %d ratio: %f\n", inliers, ratio);
 
     return true;
 

@@ -798,10 +798,10 @@ void VisionTracker::bundleAdjustment3D2D(
         index++;
     }
 
-    TIME_BEGIN()
+    //TIME_BEGIN()
     optimizer.initializeOptimization();
     optimizer.optimize ( 100 );
-    TIME_END("g2o optimization")
+    //TIME_END("g2o optimization")
 
     //cout<<endl<<"after optimization:"<<endl;
     //cout<<"T="<<endl<<Eigen::Isometry3d ( pose->estimate() ).matrix() <<endl;
