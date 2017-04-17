@@ -99,8 +99,8 @@ int main(int argc, char** argv)
                         //        cv::Scalar(0,255,0));
                     }
                 }
-                cv::imshow("result",Frame);
-                cmd = cv::waitKey(-1);
+                //cv::imshow("result",Frame);
+                //cmd = cv::waitKey(-1);
             } else {
                 
                 printf("Draw internal Frame...\n");

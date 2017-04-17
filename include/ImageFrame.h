@@ -15,9 +15,9 @@
 #include <TooN/se3.h>
 #include <TooN/so3.h>
 
-#include <cvd/image_io.h>
-#include <cvd/vision.h>
-#include <cvd/esm.h>
+//#include <cvd/image_io.h>
+//#include <cvd/vision.h>
+//#include <cvd/esm.h>
 
 #include "CameraIntrinsic.h"
 
@@ -30,7 +30,7 @@ class ImageFrame
 {
     public:
         cv::Mat image;                         // image data
-        CVD::Image<unsigned char> SBI;         // small blurry image
+        //CVD::Image<unsigned char> SBI;         // small blurry image
         vector< cv::KeyPoint > keyPoints;      // original fast keypoints
         vector< cv::Point2f > points;          // Just point2f
         vector< cv::Point2f > undisPoints;     // Undistorted keypoints
@@ -66,7 +66,7 @@ class ImageFrame
         int opticalFlowFAST(ImageFrame& refFrame);
         vector< int > fuseFAST();
         void opticalFlowTrackedFAST(ImageFrame& lastFrame);
-        void SBITrackFAST(ImageFrame& refFrame);
+        //void SBITrackFAST(ImageFrame& refFrame);
 
         cv::Mat GetTwcMat();
         cv::Mat GetTcwMat();

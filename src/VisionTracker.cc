@@ -6,25 +6,39 @@
 void VisionTracker::TrackMonocular(ImageFrame& f)
 {
     if (state == NOTINITIALIZED) {
-        SetInitializing(f);
+        //SetInitializing(f);
+        initializer.SetFirstFrame(&f);
+        state = INITIALIZING;
     } else if (state == INITIALIZING) {
-        TryInitialize(f);
+        //TryInitialize(f);
         //TryInitializeByG2O(f);
+        if (initializer.TryInitializeByG2O(&f)) {
+            refFrame = initializer.resFirstFrame;
+            //lastFrame = initializer.lastFrame;
+            state = INITIALIZED;
+        }
     } else {
-        //f.opticalFlowFAST(*refFrame);
-        TrackFeatureOpticalFlow(f);
+        //TrackFeatureOpticalFlow(f);
+        f.opticalFlowFAST(*refFrame);
         TrackPose3D2D(*refFrame, f);
-        //TrackByKeyFrame(*refFrame, f);
     }
 }
 
 void VisionTracker::TrackMonocularNewKeyFrame(ImageFrame& f)
 {
     if (state == NOTINITIALIZED) {
-        SetInitializing(f);
+        //SetInitializing(f);
+        initializer.SetFirstFrame(&f);
+        state = INITIALIZING;
     } else if (state == INITIALIZING) {
-        TryInitialize(f);
+        //TryInitialize(f);
         //TryInitializeByG2O(f);
+        //if (initializer.TryInitialize(&f)) {
+        if (initializer.TryInitializeByG2O(&f)) {
+            refFrame = initializer.resFirstFrame;
+            lastFrame = initializer.lastFrame;
+            state = INITIALIZED;
+        }
     } else {
         //f.opticalFlowFAST(*refFrame);
         //TrackPose3D2D(*refFrame, f);
@@ -814,12 +828,16 @@ void VisionTracker::TriangulateNewPoints(ImageFrame& lf, ImageFrame& rf)
         if (rf.undisTrackedPoints[i].x > 0) {          // first should has crospondence
             Map_2d_3d::left_const_iterator iter = 
                     lf.map_2d_3d.left.find(i);
-            if (iter != lf.map_2d_3d.left.end()) {      // second should has 3d map point
+            if (iter != lf.map_2d_3d.left.end()) {   // second should has 3d map point
                 
             } else {                                   // if no 3d point, add 2d-2d pair
                 pt_idx.push_back(i);
-                pt_1.push_back(K->pixel2device(lf.undisPoints[i].x, lf.undisPoints[i].y));
-                pt_2.push_back(K->pixel2device(rf.undisTrackedPoints[i].x, rf.undisTrackedPoints[i].y));
+                pt_1.push_back(K->pixel2device(
+                            lf.undisPoints[i].x, 
+                            lf.undisPoints[i].y));
+                pt_2.push_back(K->pixel2device(
+                            rf.undisTrackedPoints[i].x, 
+                            rf.undisTrackedPoints[i].y));
             }
         }
     }
@@ -829,22 +847,33 @@ void VisionTracker::TriangulateNewPoints(ImageFrame& lf, ImageFrame& rf)
         return;
     } 
 
+    cout << "Triangulate new map point:" << endl;
     cv::triangulatePoints(T1, T2, pt_1, pt_2, pts_4d);
 
-    cout << "Triangulate new map point:" << endl;
+    // get relative R, t
+    cv::Mat R = rf.R * lf.R.t();
+    cv::Mat t = -rf.R*lf.R.t()*lf.t + rf.t;
+
+    bool checkPoints = initializer.CheckPoints(R, t, pts_4d);
+
+    if (!checkPoints) {
+        printf("Triangulate inliers num too small!\n");
+    }
 
     for (int i = 0; i < pts_4d.cols; i++) {
         float w = pts_4d.at<float>(3, i);
-        cv::Point3f* mpt = new cv::Point3f(
-                pts_4d.at<float>(0, i)/w,
-                pts_4d.at<float>(1, i)/w,
-                pts_4d.at<float>(2, i)/w);
+        if (w!=0) {
+            cv::Point3f* mpt = new cv::Point3f(
+                    pts_4d.at<float>(0, i)/w,
+                    pts_4d.at<float>(1, i)/w,
+                    pts_4d.at<float>(2, i)/w);
 
-        cout << *mpt << endl;
+            cout << *mpt << endl;
 
-        map->mapPoints.insert(mpt);     // Insert map point pointer to std::set
-        lf.map_2d_3d.insert(  // Insert bimap key-val to boost::bimap in lf
-                Map_2d_3d_key_val(pt_idx[i], mpt));     
+            map->mapPoints.insert(mpt);     // Insert map point pointer to std::set
+            lf.map_2d_3d.insert(  // Insert bimap key-val to boost::bimap in lf
+                    Map_2d_3d_key_val(pt_idx[i], mpt));
+        }
     }
 
 }

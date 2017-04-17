@@ -43,7 +43,7 @@ find_package(Boost  1.54.0  	     # Minimum or EXACT version e.g. 1.36.0
   REQUIRED             					# Fail with error if Boost is not found
   COMPONENTS serialization          # Boost libraries by their canonical name
 )          
-find_package(CVD REQUIRED)
+#find_package(CVD REQUIRED)
 find_package(G2O REQUIRED)
 find_package(CSparse REQUIRED)
 find_package(TooN REQUIRED)
@@ -60,7 +60,7 @@ include_directories(
     ${EIGEN3_INCLUDE_DIR}
     ${Pangolin_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
-    ${CVD_INCLUDE_DIR}
+    #${CVD_INCLUDE_DIR}
     ${G2O_INCLUDE_DIRS}
     ${CSPARSE_INCLUDE_DIR}
     ${TooN_INCLUDE_DIR}
@@ -77,6 +77,7 @@ add_library(${PROJECT_NAME} SHARED
     src/Timer.cc
     src/Converter.cc
     src/MedianFilter.cc
+    src/Initializer.cc
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -84,7 +85,7 @@ target_link_libraries(${PROJECT_NAME}
     ${EIGEN3_LIBS} 
     ${Pangolin_LIBRARIES}
     ${Boost_LIBRARIES}
-    ${CVD_LIBRARY}
+    #${CVD_LIBRARY}
     ${CSPARSE_LIBRARY}
     ${TooN_LIBRARIES}
     g2o_core g2o_stuff g2o_types_sba g2o_csparse_extension

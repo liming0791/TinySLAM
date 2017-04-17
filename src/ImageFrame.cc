@@ -3,7 +3,8 @@
 #include "Converter.h"
 
 ImageFrame::ImageFrame(const cv::Mat& frame, CameraIntrinsic* _K): 
-    SBI(CVD::ImageRef(32, 24)), R(cv::Mat::eye(3,3, CV_64FC1)), 
+    //SBI(CVD::ImageRef(32, 24)), 
+    R(cv::Mat::eye(3,3, CV_64FC1)), 
     t(cv::Mat::zeros(3,1, CV_64FC1)), mRefFrame(this), K(_K), isKeyFrame(false)
 {
     if (frame.channels()==3) {
@@ -14,15 +15,17 @@ ImageFrame::ImageFrame(const cv::Mat& frame, CameraIntrinsic* _K):
         frame.copyTo(image);
     }
 
-    cv::Mat s_img;
-    cv::resize(image, s_img, cv::Size(32, 24));
-    cv::blur(s_img, s_img, cv::Size(3,3));
+    //cv::Mat s_img;
+    //cv::resize(image, s_img, cv::Size(32, 24));
+    //cv::blur(s_img, s_img, cv::Size(3,3));
 
-    memcpy(SBI.begin(), s_img.data, 32*24*sizeof(unsigned char));
+    //memcpy(SBI.begin(), s_img.data, 32*24*sizeof(unsigned char));
 }
 
 ImageFrame::ImageFrame(const ImageFrame& imgFrame): 
-    image(imgFrame.image), SBI(imgFrame.SBI), keyPoints(imgFrame.keyPoints), 
+    image(imgFrame.image), 
+    //SBI(imgFrame.SBI), 
+    keyPoints(imgFrame.keyPoints), 
     points(imgFrame.points), undisPoints(imgFrame.undisPoints),
     trackedPoints(imgFrame.trackedPoints), 
     undisTrackedPoints(imgFrame.undisTrackedPoints),
@@ -299,7 +302,7 @@ int ImageFrame::opticalFlowFAST(ImageFrame& refFrame)
     TIME_BEGIN()
     cv::findEssentialMat(e_pt1, e_pt2, 
             (K->fx + K->fy)/2, cv::Point2d(K->cx, K->cy),
-            cv::RANSAC, 0.9999, 2, inlier);
+            cv::RANSAC, 0.9999, 1, inlier);
     TIME_END("essential matrix estimation")
 
     int num_tracked = 0;
@@ -372,35 +375,35 @@ void ImageFrame::opticalFlowTrackedFAST(ImageFrame& lastFrame)
 
 }
 
-void ImageFrame::SBITrackFAST(ImageFrame& refFrame)
-{
-    mRefFrame = &refFrame;
-
-    CVD::Homography<8> homography;
-    CVD::StaticAppearance appearance;
-    CVD::Image< TooN::Vector<2> > greImg 
-            = CVD::Internal::gradient<TooN::Vector<2>, unsigned char>(refFrame.SBI);
-    CVD::Internal::esm_opt(homography, appearance, refFrame.SBI, greImg, SBI, 40, 1e-8, 1.0);
-    TooN::Matrix<3> H = homography.get_matrix();
-
-
-    H(0,2) = H(0,2) * 20.f;
-    H(1,2) = H(1,2) * 20.f;
-    H(2,0) = H(2,0) / 20.f;
-    H(2,1) = H(2,1) / 20.f;
-
-    keyPoints.resize(0);
-
-    for (int i = 0, _end = (int)refFrame.keyPoints.size(); i < _end; i++ ) {
-        TooN::Vector<3> P;
-        P[0] = refFrame.keyPoints[i].pt.x;
-        P[1] = refFrame.keyPoints[i].pt.y;
-        P[2] = 1;
-        TooN::Vector<3> n_P = H * P;
-        keyPoints.push_back(cv::KeyPoint(n_P[0]/n_P[2], n_P[1]/n_P[2], 10));
-    }
-
-}
+//void ImageFrame::SBITrackFAST(ImageFrame& refFrame)
+//{
+//    mRefFrame = &refFrame;
+//
+//    CVD::Homography<8> homography;
+//    CVD::StaticAppearance appearance;
+//    CVD::Image< TooN::Vector<2> > greImg 
+//            = CVD::Internal::gradient<TooN::Vector<2>, unsigned char>(refFrame.SBI);
+//    CVD::Internal::esm_opt(homography, appearance, refFrame.SBI, greImg, SBI, 40, 1e-8, 1.0);
+//    TooN::Matrix<3> H = homography.get_matrix();
+//
+//
+//    H(0,2) = H(0,2) * 20.f;
+//    H(1,2) = H(1,2) * 20.f;
+//    H(2,0) = H(2,0) / 20.f;
+//    H(2,1) = H(2,1) / 20.f;
+//
+//    keyPoints.resize(0);
+//
+//    for (int i = 0, _end = (int)refFrame.keyPoints.size(); i < _end; i++ ) {
+//        TooN::Vector<3> P;
+//        P[0] = refFrame.keyPoints[i].pt.x;
+//        P[1] = refFrame.keyPoints[i].pt.y;
+//        P[2] = 1;
+//        TooN::Vector<3> n_P = H * P;
+//        keyPoints.push_back(cv::KeyPoint(n_P[0]/n_P[2], n_P[1]/n_P[2], 10));
+//    }
+//
+//}
 
 cv::Mat ImageFrame::GetTwcMat()
 {

@@ -35,6 +35,7 @@
 #include "ImageFrame.h"
 #include "MedianFilter.h"
 #include "Mapping.h"
+#include "Initializer.h"
 
 using namespace std;
 
@@ -181,7 +182,7 @@ class VisionTracker
 
         VisionTracker() = default;
         VisionTracker(CameraIntrinsic* _K, Mapping* _map):
-            state(NOTINITIALIZED), K(_K), map(_map) { };
+            state(NOTINITIALIZED), K(_K), map(_map), initializer(_map) { };
 
         void SetInitializing(ImageFrame& f);
         void TrackMonocular(ImageFrame& f);
@@ -218,7 +219,7 @@ class VisionTracker
                 Eigen::Matrix3f& K, 
                 Eigen::Isometry3d& Tcw );
 
-//        Initializer initializer;
+        Initializer initializer;
 };
 
 #endif
