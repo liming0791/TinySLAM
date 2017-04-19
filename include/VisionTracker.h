@@ -180,9 +180,16 @@ class VisionTracker
         ImageFrame* refFrame;
         ImageFrame lastFrame;
 
+        int countFromLastKeyFrame;
+
         VisionTracker() = default;
         VisionTracker(CameraIntrinsic* _K, Mapping* _map):
-            state(NOTINITIALIZED), K(_K), map(_map), initializer(_map) { };
+            state(NOTINITIALIZED), 
+            K(_K), 
+            map(_map), 
+            countFromLastKeyFrame(0),
+            initializer(_map)
+            { };
 
         void SetInitializing(ImageFrame& f);
         void TrackMonocular(ImageFrame& f);
@@ -201,7 +208,8 @@ class VisionTracker
         void TrackPose3D2DDirect(const ImageFrame& lf, ImageFrame& rf);
         void TrackPose3D2DHybrid(ImageFrame& lf, ImageFrame& rf );
 
-        double TrackFeatureOpticalFlow(ImageFrame& f);
+        double TrackFeatureOpticalFlow(ImageFrame& kf, ImageFrame& f);
+        void updateRefFrame(ImageFrame* kf);
 
         cv::Mat GetTwcMatNow();
         cv::Mat GetTcwMatNow();
@@ -220,6 +228,8 @@ class VisionTracker
                 Eigen::Isometry3d& Tcw );
 
         Initializer initializer;
+
+        std::mutex mRefFrameMutex;
 };
 
 #endif

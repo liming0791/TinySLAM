@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #include <iostream>
+#include <mutex>
 
 #include <boost/bimap.hpp>
 
@@ -70,6 +71,7 @@ class ImageFrame
 
         cv::Mat GetTwcMat();
         cv::Mat GetTcwMat();
+
 };
 
 #endif

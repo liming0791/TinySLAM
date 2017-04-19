@@ -18,6 +18,7 @@ void CameraDevice::SetFPS(int _FPS)
 
 bool CameraDevice::openCamera(int id)
 {
+    video.set(CV_CAP_PROP_FPS, FPS);
     if ( !video.open(id) ) {
         printf("Open camera %d failed!\n", id);
         return false;

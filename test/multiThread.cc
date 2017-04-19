@@ -17,7 +17,6 @@ using namespace std;
 int main(int argc, char** argv)
 {
 
-
     // camera device 
     CameraIntrinsic K1(argv[1]);
     CameraDevice camera1(K1);
@@ -46,6 +45,9 @@ int main(int argc, char** argv)
     
     Mapping map(&K1);
     VisionTracker tracker(&K1, &map);                     // Vision Tracker
+
+    map.SetTracker(&tracker);
+    std::thread* ptMapping = new std::thread(&Mapping::Run, &map);
 
     Viewer viewer(&map, &tracker);
     std::thread* ptViewer = new std::thread(&Viewer::run, &viewer);

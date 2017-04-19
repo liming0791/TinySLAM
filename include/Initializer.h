@@ -44,6 +44,7 @@ class Initializer
 
         Mapping* map;
 
+        Initializer() = default;
         Initializer(Mapping *_map):map(_map) {};
         ~Initializer() = default;
 
@@ -53,7 +54,7 @@ class Initializer
         bool TryInitializeByG2O(ImageFrame *f);
         bool RobustTrackPose2D2D(ImageFrame &lf, 
                 ImageFrame &rf);
-        bool CheckPoints(cv::Mat &R, cv::Mat &t, cv::Mat &pts);
+        static bool CheckPoints(cv::Mat &R, cv::Mat &t, cv::Mat &pts);
         bool RobustTrackPose2D2DG2O(ImageFrame &lf, 
                 ImageFrame &rf);
 };

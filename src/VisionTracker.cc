@@ -13,14 +13,22 @@ void VisionTracker::TrackMonocular(ImageFrame& f)
         //TryInitialize(f);
         //TryInitializeByG2O(f);
         if (initializer.TryInitializeByG2O(&f)) {
-            refFrame = initializer.resFirstFrame;
+            {
+                std::lock_guard<std::mutex> lock(mRefFrameMutex);
+                refFrame = initializer.resFirstFrame;
+            }
             //lastFrame = initializer.lastFrame;
             state = INITIALIZED;
         }
     } else {
         //TrackFeatureOpticalFlow(f);
-        f.opticalFlowFAST(*refFrame);
-        TrackPose3D2D(*refFrame, f);
+        ImageFrame* kf;
+        {
+            std::lock_guard<std::mutex> lock(mRefFrameMutex);
+            kf = refFrame;
+        }
+        f.opticalFlowFAST(*kf);
+        TrackPose3D2D(*kf, f);
     }
 }
 
@@ -35,14 +43,22 @@ void VisionTracker::TrackMonocularNewKeyFrame(ImageFrame& f)
         //TryInitializeByG2O(f);
         //if (initializer.TryInitialize(&f)) {
         if (initializer.TryInitializeByG2O(&f)) {
-            refFrame = initializer.resFirstFrame;
-            lastFrame = initializer.lastFrame;
+            {
+                std::lock_guard<std::mutex> lock(mRefFrameMutex);
+                refFrame = initializer.resFirstFrame;
+                lastFrame = initializer.lastFrame;
+            }
             state = INITIALIZED;
         }
     } else {
         //f.opticalFlowFAST(*refFrame);
         //TrackPose3D2D(*refFrame, f);
-        TrackByKeyFrame(*refFrame, f);
+        ImageFrame* kf;
+        {
+            std::lock_guard<std::mutex> lock(mRefFrameMutex);
+            kf = refFrame;
+        }
+        TrackByKeyFrame(*kf, f);
     }
 }
 
@@ -76,7 +92,7 @@ void VisionTracker::TryInitialize(ImageFrame& f)
     //double ratio_tracked = 
     //        num_tracked / (double)f.undisTrackedPoints.size();
 
-    double ratio_tracked = TrackFeatureOpticalFlow(f);
+    double ratio_tracked = TrackFeatureOpticalFlow(*refFrame, f);
 
     if (ratio_tracked < 0.5) {
         printf("Initialize Tracked points num too small!"
@@ -405,9 +421,11 @@ void VisionTracker::reset()
 
 void VisionTracker::TrackByKeyFrame(ImageFrame& kf, ImageFrame& f)
 {
+
+    countFromLastKeyFrame++;
     //int numTracked = f.opticalFlowFAST(kf);
     //double ratio = (double)numTracked / (double)kf.points.size();
-    double ratio = TrackFeatureOpticalFlow(f);
+    double ratio = TrackFeatureOpticalFlow(kf, f);
 
     printf("TrackFeature OpticalFlow ratio: %f\n", ratio);
 
@@ -416,9 +434,10 @@ void VisionTracker::TrackByKeyFrame(ImageFrame& kf, ImageFrame& f)
     double dist = cv::norm(-f.R*kf.R.t()*kf.t + f.t, cv::NORM_L2);
     cout << "Frame dist to keyframe: " << dist << endl;
 
-    if (ratio >= 0.6) {
-    } else if( dist > 0.5 ) {
-        InsertKeyFrame(kf, f);
+    if (ratio < 0.6 && countFromLastKeyFrame > 10) {
+        //InsertKeyFrame(kf, f);
+        map->AddFrameToQ(f);
+        countFromLastKeyFrame = 0;
     }
 }
 
@@ -692,16 +711,19 @@ void VisionTracker::TrackPose3D2D(const ImageFrame& lf, ImageFrame& rf)
     const double *R_data = lf.R.ptr<double>(0);
     const double *t_data = lf.t.ptr<double>(0);
 
-    for (Map_2d_3d::const_iterator iter = lf.map_2d_3d.begin(), 
-            i_end = lf.map_2d_3d.end(); iter != i_end; iter++) {
-        if (rf.undisTrackedPoints[iter->left].x > 0) {
-            pts_2d.push_back(rf.undisTrackedPoints[iter->left]);    
-            cv::Point3f* pp = iter->right;
-            pts_3d.push_back(cv::Point3f(        // convert points from world to lf
-                        R_data[0]*pp->x + R_data[1]*pp->y + R_data[2]*pp->z + t_data[0],
-                        R_data[3]*pp->x + R_data[4]*pp->y + R_data[5]*pp->z + t_data[1],
-                        R_data[6]*pp->x + R_data[7]*pp->y + R_data[8]*pp->z + t_data[2]
-                        ));
+    {
+        std::lock_guard<std::mutex> lock(map->mMapMutex);
+        for (Map_2d_3d::const_iterator iter = lf.map_2d_3d.begin(), 
+                i_end = lf.map_2d_3d.end(); iter != i_end; iter++) {
+            if (rf.undisTrackedPoints[iter->left].x > 0) {
+                pts_2d.push_back(rf.undisTrackedPoints[iter->left]);    
+                cv::Point3f* pp = iter->right;
+                pts_3d.push_back(cv::Point3f(        // convert points from world to lf
+                            R_data[0]*pp->x + R_data[1]*pp->y + R_data[2]*pp->z + t_data[0],
+                            R_data[3]*pp->x + R_data[4]*pp->y + R_data[5]*pp->z + t_data[1],
+                            R_data[6]*pp->x + R_data[7]*pp->y + R_data[8]*pp->z + t_data[2]
+                            ));
+            }
         }
     }
 
@@ -1232,22 +1254,22 @@ void VisionTracker::TrackPose3D2DHybrid(ImageFrame& lf, ImageFrame& rf)
 
 }
 
-double VisionTracker::TrackFeatureOpticalFlow(ImageFrame& f)
+double VisionTracker::TrackFeatureOpticalFlow(ImageFrame& kf, ImageFrame& f)
 {
     // optical flow fast feature by lastframe
     f.opticalFlowTrackedFAST(lastFrame);
-    f.mRefFrame = refFrame;
+    f.mRefFrame = &kf;
 
-    // check essentialmat with refFrame
+    // check essentialmat with keyFrame
     vector< int > pt_idx;
     vector< cv::Point2f > pt_1, pt_2;
-    pt_idx.reserve(refFrame->points.size());
-    pt_1.reserve(refFrame->points.size());
-    pt_2.reserve(refFrame->points.size());
+    pt_idx.reserve(kf.points.size());
+    pt_1.reserve(kf.points.size());
+    pt_2.reserve(kf.points.size());
 
     for (int i = 0, _end = (int)f.trackedPoints.size(); i < _end; i++) {
         if (f.trackedPoints[i].x > 0) {
-            pt_1.push_back(refFrame->undisPoints[i]);
+            pt_1.push_back(kf.undisPoints[i]);
             pt_2.push_back(f.undisTrackedPoints[i]);
             pt_idx.push_back(i);
         }
@@ -1275,7 +1297,7 @@ double VisionTracker::TrackFeatureOpticalFlow(ImageFrame& f)
     // upate last frame
     lastFrame = f;
 
-    return (double)num_inliers / (double)refFrame->points.size();
+    return (double)num_inliers / (double)kf.points.size();
 
 }
 
@@ -1286,6 +1308,13 @@ void VisionTracker::poseEstimationDirect(
         Eigen::Isometry3d& Tcw )
 {
     
+}
+
+void VisionTracker::updateRefFrame(ImageFrame* kf)
+{
+    std::lock_guard<std::mutex> lock(mRefFrameMutex);
+    refFrame = kf;
+    lastFrame = *kf;
 }
 
 cv::Mat VisionTracker::GetTwcMatNow()

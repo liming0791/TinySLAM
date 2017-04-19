@@ -495,7 +495,7 @@ bool Initializer::CheckPoints(cv::Mat &R, cv::Mat &t, cv::Mat &pts)
 
         double cosAngle = pts_3d.dot(O2P) / (cv::norm(pts_3d) * cv::norm(O2P));
 
-        if (cosAngle > 0.999) {
+        if (cosAngle > 0.995) {
             pts.at<float>(3, i) = 0;   // mark as outlier
             //printf("Point disparty too smalll , cosAngle: %f\n", cosAngle);
         } else {
@@ -505,7 +505,7 @@ bool Initializer::CheckPoints(cv::Mat &R, cv::Mat &t, cv::Mat &pts)
     }
 
     double ratio = (double)inliers/(double)pts.cols;
-    if (ratio < 0.5) {
+    if (ratio < 0.6) {
         printf("Triangulation inliers too small !\n");
         return false;
     }
