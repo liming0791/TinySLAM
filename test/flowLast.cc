@@ -72,27 +72,10 @@ int main(int argc, char** argv)
         }
 
         if (cmd == 's') {
-            if (isFirst) {              // fisrt 's'
-                refImgFrame = new ImageFrame(Frame, &K1); 
-                refImgFrame->extractFAST();
-                lastFrame = *refImgFrame;
-                map.ClearMap();
-                isFirst = false;
-            } else {                                // second 's'
-                if ( refImgFrame != NULL ) {
-
-                    ImageFrame newImgFrame;
-                    
-                    TIME_BEGIN()
-                    newImgFrame = ImageFrame(Frame, &K1);
-                    TIME_END("New Image Frame")
-
-                    // optical flow result
-                    newImgFrame.opticalFlowTrackedFAST(lastFrame);
-                    lastFrame = newImgFrame;
-                    isFirst = true;
-                }    
-            }
+            refImgFrame = new ImageFrame(Frame, &K1); 
+            refImgFrame->extractFAST();
+            lastFrame = *refImgFrame;
+            map.ClearMap();
         } else {                                
             if ( refImgFrame != NULL ) {
                 ImageFrame newImgFrame;
@@ -108,13 +91,63 @@ int main(int argc, char** argv)
 
                 lastFrame = newImgFrame;
 
-                for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); i < _end; i++) { // draw result
+                for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); 
+                        i < _end; i++) { // draw result
+                    if (newImgFrame.trackedPoints[i].x > 0) {
+                        cv::line(Frame, refImgFrame->points[i], 
+                                newImgFrame.trackedPoints[i],
+                                cv::Scalar(0, 0, 255));
+                    }
+                }
+
+                // essentialMat estimation
+                // check essentialmat with keyFrame
+                vector< int > pt_idx;
+                vector< cv::Point2f > pt_1, pt_2;
+                pt_idx.reserve(newImgFrame.points.size());
+                pt_1.reserve(newImgFrame.points.size());
+                pt_2.reserve(newImgFrame.points.size());
+
+                for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); i < _end; i++) {
+                    if (newImgFrame.trackedPoints[i].x > 0) {
+                        pt_1.push_back(refImgFrame->undisPoints[i]);
+                        pt_2.push_back(newImgFrame.undisTrackedPoints[i]);
+                        pt_idx.push_back(i);
+                    }
+                }
+
+                // essential matrix estimation validation
+                cv::Mat inlier;
+                TIME_BEGIN()
+                cv::findEssentialMat(pt_1, pt_2, 
+                        (K1.fx + K1.fy)/2, cv::Point2d(K1.cx, K1.cy),
+                        cv::RANSAC, 0.9999, 2, inlier);
+                TIME_END("essential matrix estimation")
+
+                int num_inliers = 0;
+                for (int i = 0, _end = (int)pt_1.size(); i < _end; i++) {
+                    if (inlier.at< unsigned char >(i) == 0) {
+                        int idx = pt_idx[i];
+                        newImgFrame.trackedPoints[idx].x = 
+                                newImgFrame.trackedPoints[idx].y = 0;
+                        newImgFrame.undisTrackedPoints[idx].x = 
+                                newImgFrame.undisTrackedPoints[idx].y = 0;
+                    } else {
+                        num_inliers++;
+                    }
+                }
+
+                for (int i = 0, _end = (int)newImgFrame.trackedPoints.size(); 
+                        i < _end; i++) { // draw result
                     if (newImgFrame.trackedPoints[i].x > 0) {
                         cv::line(Frame, refImgFrame->points[i], 
                                 newImgFrame.trackedPoints[i],
                                 cv::Scalar(0, 255, 0));
                     }
                 }
+
+                printf("Track inlier ratio: %f\n", 
+                        (double)num_inliers / (double)refImgFrame->points.size());
             }    
         }
 
